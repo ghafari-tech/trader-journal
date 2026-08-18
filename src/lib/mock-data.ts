@@ -23,8 +23,8 @@ export const monthlyPerformance = [
 ];
 
 export const winLossData = [
-  { name: "برنده", value: 100, color: "oklch(0.75 0.17 155)" },
-  { name: "بازنده", value: 320, color: "oklch(0.65 0.23 25)" },
+  { name: "برنده", value: 90, color: "oklch(0.75 0.17 155)" },
+  { name: "بازنده", value: 10, color: "oklch(0.65 0.23 25)" },
 ];
 
 export const drawdownData = Array.from({ length: 20 }, (_, i) => ({
