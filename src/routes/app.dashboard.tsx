@@ -39,7 +39,7 @@ export const Route = createFileRoute("/app/dashboard")({
 
 const stats = [
   { label: "سود کل", value: "$۱,۴۸۰", change: "+۲۴.۸٪", positive: true, icon: DollarSign },
-  { label: "نرخ برد", value: "۶۸٪", change: "+۴.۲٪", positive: true, icon: Percent },
+  { label: "نرخ برد", value: "50٪", change: "+۴.۲٪", positive: true, icon: Percent },
   { label: "Profit Factor", value: "۲.۱۴", change: "+۰.۳", positive: true, icon: TrendingUp },
   { label: "Max Drawdown", value: "-۸.۲٪", change: "-۱.۱٪", positive: false, icon: TrendingDown },
 ];
