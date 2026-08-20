@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { goals as seedGoals } from "@/lib/mock-data";
+// import { goals as seedGoals } from "@/api/golse.jsx"; 
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/goals")({
