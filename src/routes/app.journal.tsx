@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus, BookOpen, CheckCircle2, XCircle, Filter, Search as SearchIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect,useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,22 +19,40 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { journalEntries as seed } from "@/lib/mock-data";
-import { toast } from "sonner";
-
 export const Route = createFileRoute("/app/journal")({
   head: () => ({ meta: [{ title: "ژورنال" }] }),
   component: JournalPage,
 });
-
-function JournalPage() {
-  const [entries, setEntries] = useState(seed);
+  function JournalPage() {
+  const [entries, setEntries] = useState<any[]>([]);
   const [newOpen, setNewOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("https://trade.piqqgram.ir/app/journal/")
+      .then((res) => res.json())
+      .then((data) => {
+        const mappedJournals = data.journals.map((j: any) => ({
+          id: j.id,
+          date: j.date,
+          title: j.title,
+          tradeId: j.transaction_id,
+          emotion: j.feel,
+          mistakes: j.mistakes,
+          lesson: j.lesson_learned,
+          plan: j.followed_plan,
+        }));
+
+        setEntries(mappedJournals);
+      })
+      .catch((error) => {
+        console.error("Error fetching journals:", error);
+      });
+  }, []);
+
   const [query, setQuery] = useState("");
   const [planFilter, setPlanFilter] = useState<"all" | "yes" | "no">("all");
   const [emotionFilter, setEmotionFilter] = useState<string>("all");
-
   const [nTitle, setNTitle] = useState("");
   const [nTrade, setNTrade] = useState("");
   const [nEmotion, setNEmotion] = useState("آرام");
