@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus, BookOpen, CheckCircle2, XCircle, Filter, Search as SearchIcon } from "lucide-react";
 import { useEffect,useMemo, useState } from "react";
+import {toast} from"sonner"
+import { apiFetch } from "@/api/client"
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,14 +31,14 @@ export const Route = createFileRoute("/app/journal")({
   const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
-    fetch("https://trade.piqqgram.ir/app/journal/")
+    fetch("https://trade.piqgram.ir/app/journal/")
       .then((res) => res.json())
       .then((data) => {
         const mappedJournals = data.journals.map((j: any) => ({
           id: j.id,
-          date: j.date,
+          date: j.created_at,
           title: j.title,
-          tradeId: j.transaction_id,
+          tradeId: j.transaction,
           emotion: j.feel,
           mistakes: j.mistakes,
           lesson: j.lesson_learned,
@@ -70,18 +72,91 @@ export const Route = createFileRoute("/app/journal")({
     });
   }, [entries, query, planFilter, emotionFilter]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nTitle.trim()) { toast.error("عنوان ژورنال را وارد کنید"); return; }
-    setEntries((list) => [
-      { id: `J${list.length + 1}`, date: "امروز", tradeId: nTrade || "—", title: nTitle, mistakes: nMistakes, lesson: nLesson, emotion: nEmotion, plan: nPlan },
-      ...list,
-    ]);
-    toast.success("ژورنال با موفقیت ثبت شد");
-    setNTitle(""); setNTrade(""); setNMistakes(""); setNLesson(""); setNEmotion("آرام"); setNPlan(true);
-    setNewOpen(false);
+const emotionMap: Record<string, string> = {
+  آرام: "comfort",
+  متمرکز: "concentrated",
+  طمع: "greed",
+  ترس: "fear",
+  انتقام: "revenge",
+};
+
+async function submit(e: React.FormEvent) {
+  e.preventDefault();
+
+  if (!nTitle.trim()) {
+    toast.error("عنوان ژورنال را وارد کنید");
+    return;
   }
 
+  if (!nTrade.trim()) {
+    toast.error("شناسه معامله را وارد کنید");
+    return;
+  }
+
+  if (!nTrade.startsWith("T-")) {
+    toast.error("شناسه معامله باید با T- شروع شود");
+    return;
+  }
+
+  const journalData = {
+    title: nTitle.trim(),
+    transaction_id: nTrade.trim(),
+    feel: emotionMap[nEmotion],
+    mistakes: nMistakes.trim(),
+    lesson_learned: nLesson.trim(),
+    followed_plan: nPlan,
+  };
+
+  try {
+    await apiFetch(
+      "/app/journal/add/",
+      {
+        method: "POST",
+        body: JSON.stringify(journalData),
+      },
+      { auth: true },
+    );
+
+    toast.success("ژورنال با موفقیت ثبت شد");
+
+    const data = await apiFetch<{ journals: any[] }>(
+      "/journal/",
+      {
+        method: "GET",
+      },
+      { auth: true },
+    );
+
+    const mappedJournals = data.journals.map((j: any) => ({
+      id: j.id,
+      date: j.created_at,
+      title: j.title,
+      tradeId: j.transaction,
+      emotion: j.feel,
+      mistakes: j.mistakes,
+      lesson: j.lesson_learned,
+      plan: j.followed_plan,
+    }));
+
+    setEntries(mappedJournals);
+
+    setNTitle("");
+    setNTrade("");
+    setNMistakes("");
+    setNLesson("");
+    setNEmotion("آرام");
+    setNPlan(true);
+    setNewOpen(false);
+  } catch (error) {
+    console.error("Error adding journal:", error);
+
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "ثبت ژورنال ناموفق بود",
+    );
+  }
+}
   return (
     <AppShell
       title="ژورنال معاملاتی"
