@@ -20,21 +20,30 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { getCurrentUserFullName } from "@/lib/current-user";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+} from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,17 +56,61 @@ import {
 import { toast } from "sonner";
 
 const nav = [
-  { to: "/app/dashboard", icon: LayoutDashboard, label: "داشبورد" },
-  { to: "/app/portfolios", icon: Wallet, label: "پرتفولیوها" },
-  { to: "/app/trades", icon: LineChart, label: "معاملات" },
-  { to: "/app/journal", icon: BookOpen, label: "ژورنال" },
-  { to: "/app/ai-coach", icon: Sparkles, label: "مربی هوشمند" },
-  { to: "/app/calendar", icon: CalendarDays, label: "تقویم معاملاتی" },
-  { to: "/app/risk", icon: ShieldCheck, label: "مدیریت ریسک" },
-  { to: "/app/goals", icon: Target, label: "اهداف" },
-  { to: "/app/achievements", icon: Trophy, label: "نشان‌ها" },
-  { to: "/app/settings", icon: Settings, label: "تنظیمات" },
-  { to: "/app/admin", icon: UserCog, label: "پنل مدیریت" },
+  {
+    to: "/app/dashboard",
+    icon: LayoutDashboard,
+    label: "داشبورد",
+  },
+  {
+    to: "/app/portfolios",
+    icon: Wallet,
+    label: "پرتفولیوها",
+  },
+  {
+    to: "/app/trades",
+    icon: LineChart,
+    label: "معاملات",
+  },
+  {
+    to: "/app/journal",
+    icon: BookOpen,
+    label: "ژورنال",
+  },
+  {
+    to: "/app/ai-coach",
+    icon: Sparkles,
+    label: "مربی هوشمند",
+  },
+  {
+    to: "/app/calendar",
+    icon: CalendarDays,
+    label: "تقویم معاملاتی",
+  },
+  {
+    to: "/app/risk",
+    icon: ShieldCheck,
+    label: "مدیریت ریسک",
+  },
+  {
+    to: "/app/goals",
+    icon: Target,
+    label: "اهداف",
+  },
+  {
+    to: "/app/achievements",
+    icon: Trophy,
+    label: "نشان‌ها",
+  },
+  {
+    to: "/app/settings",
+    icon: Settings,
+    label: "تنظیمات",
+  },
+  {
+    to: "/app/admin",
+    icon: UserCog,
+    label: "پنل مدیریت",
+  },
 ] as const;
 
 const notifications = [
@@ -95,21 +148,67 @@ const notifications = [
   },
 ];
 
-function UserBlock({ compact = false }: { compact?: boolean }) {
-  // اسم کاربر از اطلاعات ذخیره‌شده‌ی ثبت‌نام خوانده می‌شود
-  const userFullName = getCurrentUserFullName();
+function UserBlock({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
+  /*
+   * مهم:
+   * اطلاعات کاربر ممکن است از localStorage بیاید.
+   * بنابراین در اولین render مقدار ثابت می‌دهیم
+   * تا SSR و Client دقیقاً یک خروجی داشته باشند.
+   */
+  const [userFullName, setUserFullName] =
+    useState("کاربر");
 
-  // جدا کردن نام و نام خانوادگی برای ساخت حروف آواتار
-  const nameParts = userFullName.trim().split(/\s+/);
+  const [mounted, setMounted] =
+    useState(false);
 
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ");
+  useEffect(() => {
+    setMounted(true);
 
-  // مثال:
-  // نوید بنی النجار → نب
-  // علی رضایی → عر
+    try {
+      const fullName =
+        getCurrentUserFullName();
+
+      if (fullName?.trim()) {
+        setUserFullName(
+          fullName.trim(),
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Get current user error:",
+        error,
+      );
+    }
+  }, []);
+
+  /*
+   * قبل از hydration فقط مقدار ثابت
+   * "کاربر" نمایش داده می‌شود.
+   *
+   * بعد از mount نام واقعی کاربر می‌آید.
+   */
+  const displayName = mounted
+    ? userFullName
+    : "کاربر";
+
+  const nameParts = displayName
+    .trim()
+    .split(/\s+/);
+
+  const firstName =
+    nameParts[0] || "";
+
+  const lastName =
+    nameParts.slice(1).join(" ");
+
   const initials =
-    `${firstName.charAt(0)}${lastName.charAt(0)}` || "ک";
+    lastName.length > 0
+      ? `${firstName.charAt(0)}${lastName.charAt(0)}`
+      : firstName.charAt(0) || "ک";
 
   return (
     <DropdownMenu>
@@ -129,7 +228,7 @@ function UserBlock({ compact = false }: { compact?: boolean }) {
 
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">
-              {userFullName}
+              {displayName}
             </div>
 
             <div className="flex items-center gap-1">
@@ -146,20 +245,31 @@ function UserBlock({ compact = false }: { compact?: boolean }) {
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel>حساب کاربری</DropdownMenuLabel>
+      <DropdownMenuContent
+        align="start"
+        className="w-56"
+      >
+        <DropdownMenuLabel>
+          حساب کاربری
+        </DropdownMenuLabel>
 
         <DropdownMenuSeparator />
 
         <DropdownMenuItem asChild>
-          <Link to="/app/settings" className="cursor-pointer">
+          <Link
+            to="/app/settings"
+            className="cursor-pointer"
+          >
             <Settings className="ml-2 h-4 w-4" />
             تنظیمات پروفایل
           </Link>
         </DropdownMenuItem>
 
         <DropdownMenuItem asChild>
-          <Link to="/app/portfolios" className="cursor-pointer">
+          <Link
+            to="/app/portfolios"
+            className="cursor-pointer"
+          >
             <Wallet className="ml-2 h-4 w-4" />
             پرتفولیوها
           </Link>
@@ -170,7 +280,9 @@ function UserBlock({ compact = false }: { compact?: boolean }) {
         <DropdownMenuItem
           className="cursor-pointer text-destructive focus:text-destructive"
           onSelect={() =>
-            toast.success("خارج شدی — به‌زودی به صفحه ورود برمی‌گردی")
+            toast.success(
+              "خارج شدی — به‌زودی به صفحه ورود برمی‌گردی",
+            )
           }
         >
           <LogOut className="ml-2 h-4 w-4" />
@@ -181,13 +293,19 @@ function UserBlock({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+function NavList({
+  onNavigate,
+}: {
+  onNavigate?: () => void;
+}) {
   const location = useLocation();
 
   return (
     <ul className="space-y-1">
       {nav.map((item) => {
-        const active = location.pathname === item.to;
+        const active =
+          location.pathname === item.to;
+
         const Icon = item.icon;
 
         return (
@@ -205,11 +323,14 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               <Icon
                 className={cn(
                   "h-4 w-4 shrink-0",
-                  active && "text-primary",
+                  active &&
+                    "text-primary",
                 )}
               />
 
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">
+                {item.label}
+              </span>
 
               {active && (
                 <span className="mr-auto h-1.5 w-1.5 rounded-full bg-primary" />
@@ -239,12 +360,19 @@ function NotificationsMenu() {
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent
+        align="end"
+        className="w-80"
+      >
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>اعلان‌ها</span>
 
           <button
-            onClick={() => toast.success("همه اعلان‌ها خوانده شد")}
+            onClick={() =>
+              toast.success(
+                "همه اعلان‌ها خوانده شد",
+              )
+            }
             className="text-[11px] text-primary hover:underline"
           >
             علامت‌گذاری همه
@@ -265,11 +393,14 @@ function NotificationsMenu() {
                 <div
                   className={cn(
                     "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                    n.tone === "loss" &&
+                    n.tone ===
+                      "loss" &&
                       "bg-destructive/15 text-destructive",
-                    n.tone === "primary" &&
+                    n.tone ===
+                      "primary" &&
                       "bg-primary/15 text-primary",
-                    n.tone === "accent" &&
+                    n.tone ===
+                      "accent" &&
                       "bg-accent/15 text-accent",
                   )}
                 >
@@ -309,12 +440,12 @@ export function AppShell({
   subtitle?: string;
   actions?: ReactNode;
 }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] =
+    useState(false);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
-
         {/* Desktop Sidebar */}
         <aside className="hidden w-64 shrink-0 border-l border-sidebar-border bg-sidebar lg:flex lg:flex-col">
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
@@ -326,13 +457,13 @@ export function AppShell({
               <span className="text-sm font-bold">
                 TraderJournal
               </span>
+
               <span className="text-[10px] text-muted-foreground">
                 AI Coach
               </span>
             </div>
           </div>
 
-          {/* User block */}
           <div className="border-b border-sidebar-border p-3">
             <UserBlock />
           </div>
@@ -348,11 +479,8 @@ export function AppShell({
 
         {/* Main */}
         <div className="flex min-w-0 flex-1 flex-col">
-
           {/* Topbar */}
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
-
-            {/* Mobile / Tablet menu */}
             <Sheet
               open={mobileOpen}
               onOpenChange={setMobileOpen}
@@ -384,6 +512,7 @@ export function AppShell({
                     <span className="text-sm font-bold">
                       TraderJournal
                     </span>
+
                     <span className="text-[10px] text-muted-foreground">
                       AI Coach
                     </span>
@@ -400,14 +529,15 @@ export function AppShell({
                   </div>
 
                   <NavList
-                    onNavigate={() => setMobileOpen(false)}
+                    onNavigate={() =>
+                      setMobileOpen(false)
+                    }
                   />
                 </nav>
               </SheetContent>
             </Sheet>
 
             <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
-
               <div className="relative min-w-0 max-w-md flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
