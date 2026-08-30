@@ -148,17 +148,19 @@ const notifications = [
   },
 ];
 
+/**
+ * بخش اطلاعات کاربر
+ *
+ * نکته مهم:
+ * localStorage فقط بعد از mount شدن مرورگر خوانده می‌شود.
+ * بنابراین SSR و اولین render کلاینت دقیقاً یکسان هستند
+ * و خطای Hydration ایجاد نمی‌شود.
+ */
 function UserBlock({
   compact = false,
 }: {
   compact?: boolean;
 }) {
-  /*
-   * مهم:
-   * اطلاعات کاربر ممکن است از localStorage بیاید.
-   * بنابراین در اولین render مقدار ثابت می‌دهیم
-   * تا SSR و Client دقیقاً یک خروجی داشته باشند.
-   */
   const [userFullName, setUserFullName] =
     useState("کاربر");
 
@@ -168,28 +170,67 @@ function UserBlock({
   useEffect(() => {
     setMounted(true);
 
-    try {
-      const fullName =
-        getCurrentUserFullName();
+    const loadUser = () => {
+      try {
+        const fullName =
+          getCurrentUserFullName();
 
-      if (fullName?.trim()) {
-        setUserFullName(
-          fullName.trim(),
+        if (fullName?.trim()) {
+          setUserFullName(
+            fullName.trim(),
+          );
+        } else {
+          setUserFullName("کاربر");
+        }
+      } catch (error) {
+        console.error(
+          "Get current user error:",
+          error,
         );
+
+        setUserFullName("کاربر");
       }
-    } catch (error) {
-      console.error(
-        "Get current user error:",
-        error,
+    };
+
+    loadUser();
+
+    /**
+     * اگر کاربر در قسمت دیگری از برنامه
+     * اطلاعاتش را تغییر داد، UserBlock هم
+     * بتواند خودش را به‌روزرسانی کند.
+     */
+    const handleUserChanged = () => {
+      loadUser();
+    };
+
+    window.addEventListener(
+      "traderjournal-user-changed",
+      handleUserChanged,
+    );
+
+    window.addEventListener(
+      "storage",
+      handleUserChanged,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "traderjournal-user-changed",
+        handleUserChanged,
       );
-    }
+
+      window.removeEventListener(
+        "storage",
+        handleUserChanged,
+      );
+    };
   }, []);
 
   /*
-   * قبل از hydration فقط مقدار ثابت
-   * "کاربر" نمایش داده می‌شود.
+   * قبل از mount همیشه "کاربر" نمایش داده می‌شود.
    *
-   * بعد از mount نام واقعی کاربر می‌آید.
+   * بعد از mount نام واقعی از localStorage
+   * نمایش داده خواهد شد.
    */
   const displayName = mounted
     ? userFullName
@@ -197,7 +238,8 @@ function UserBlock({
 
   const nameParts = displayName
     .trim()
-    .split(/\s+/);
+    .split(/\s+/)
+    .filter(Boolean);
 
   const firstName =
     nameParts[0] || "";
@@ -205,6 +247,13 @@ function UserBlock({
   const lastName =
     nameParts.slice(1).join(" ");
 
+  /**
+   * ساخت حروف آواتار
+   *
+   * saman saman → ss
+   * نوید بنی النجار → ن‌ن
+   * علی رضایی → ع‌ر
+   */
   const initials =
     lastName.length > 0
       ? `${firstName.charAt(0)}${lastName.charAt(0)}`
@@ -214,6 +263,7 @@ function UserBlock({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
+          type="button"
           className={cn(
             "flex w-full items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-2.5 text-right transition-colors hover:bg-sidebar-accent/70",
             compact &&
@@ -368,6 +418,7 @@ function NotificationsMenu() {
           <span>اعلان‌ها</span>
 
           <button
+            type="button"
             onClick={() =>
               toast.success(
                 "همه اعلان‌ها خوانده شد",
