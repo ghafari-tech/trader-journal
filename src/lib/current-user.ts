@@ -1,3 +1,4 @@
+
 const CURRENT_USER_KEY = "trader_journal_current_user";
 
 export type CurrentUser = {
@@ -8,7 +9,9 @@ export type CurrentUser = {
 /**
  * ذخیره اطلاعات کاربر فعلی
  */
-export function setCurrentUser(user: CurrentUser): void {
+export function setCurrentUser(
+  user: CurrentUser,
+): void {
   if (typeof window === "undefined") return;
 
   try {
@@ -28,7 +31,7 @@ export function setCurrentUser(user: CurrentUser): void {
 }
 
 /**
- * دریافت کاربر فعلی
+ * دریافت کاربر فعلی از localStorage
  */
 export function getCurrentUser(): CurrentUser | null {
   if (typeof window === "undefined") {
@@ -43,9 +46,8 @@ export function getCurrentUser(): CurrentUser | null {
       return null;
     }
 
-    const parsed = JSON.parse(
-      savedUser,
-    ) as Partial<CurrentUser>;
+    const parsed =
+      JSON.parse(savedUser) as Partial<CurrentUser>;
 
     return {
       first_name:

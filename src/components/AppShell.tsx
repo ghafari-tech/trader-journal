@@ -19,6 +19,7 @@ import {
   ChevronDown,
   AlertTriangle,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import {
   useEffect,
@@ -26,15 +27,17 @@ import {
   type ReactNode,
 } from "react";
 
-import { getCurrentUserFullName } from "@/lib/current-user";
+import { apiFetch } from "@/api/client";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
 import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
+
 import { Badge } from "@/components/ui/badge";
 
 import {
@@ -54,6 +57,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { toast } from "sonner";
+
+/* =========================================================
+   Navigation
+========================================================= */
 
 const nav = [
   {
@@ -113,6 +120,10 @@ const nav = [
   },
 ] as const;
 
+/* =========================================================
+   Notifications
+========================================================= */
+
 const notifications = [
   {
     id: 1,
@@ -148,59 +159,154 @@ const notifications = [
   },
 ];
 
-/**
- * بخش اطلاعات کاربر
- *
- * نکته مهم:
- * localStorage فقط بعد از mount شدن مرورگر خوانده می‌شود.
- * بنابراین SSR و اولین render کلاینت دقیقاً یکسان هستند
- * و خطای Hydration ایجاد نمی‌شود.
- */
+/* =========================================================
+   API Types
+========================================================= */
+
+type UserApiResponse = {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string | null;
+  image_profile?: string | null;
+};
+
+type PlanApiResponse = {
+  plan?: {
+    id?: number;
+    user?: number;
+    type_display?: string;
+    start_date?: string;
+    end_date?: string;
+  } | null;
+};
+
+/* =========================================================
+   Helpers
+========================================================= */
+
+function toPersianNumber(value: string | number): string {
+  return String(value).replace(/\d/g, (digit) => {
+    return "۰۱۲۳۴۵۶۷۸۹"[Number(digit)];
+  });
+}
+
+function formatDate(dateString?: string): string {
+  if (!dateString) return "—";
+
+  const parts = dateString.split("-");
+
+  if (parts.length !== 3) {
+    return dateString;
+  }
+
+  const [year, month, day] = parts;
+
+  /*
+   * API تاریخ میلادی می‌دهد.
+   * فعلاً همان تاریخ را به شکل خوانا نمایش می‌دهیم.
+   *
+   * اگر در پروژه تبدیل دقیق میلادی به شمسی داری،
+   * می‌توانیم این قسمت را با همان سیستم پروژه هماهنگ کنیم.
+   */
+  return toPersianNumber(`${year}/${month}/${day}`);
+}
+
+function calculateRemainingDays(
+  endDate?: string,
+): number | null {
+  if (!endDate) return null;
+
+  const end = new Date(`${endDate}T23:59:59`);
+  const now = new Date();
+
+  const diff =
+    end.getTime() - now.getTime();
+
+  if (diff <= 0) {
+    return 0;
+  }
+
+  return Math.ceil(
+    diff / (1000 * 60 * 60 * 24),
+  );
+}
+
+/* =========================================================
+   User Block
+========================================================= */
+
 function UserBlock({
   compact = false,
 }: {
   compact?: boolean;
 }) {
-  const [userFullName, setUserFullName] =
-    useState("کاربر");
+  const [user, setUser] =
+    useState<UserApiResponse | null>(null);
 
-  const [mounted, setMounted] =
+  const [plan, setPlan] =
+    useState<PlanApiResponse["plan"]>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
     useState(false);
 
-  useEffect(() => {
-    setMounted(true);
+  async function loadUserData() {
+    try {
+      setLoading(true);
+      setError(false);
 
-    const loadUser = () => {
-      try {
-        const fullName =
-          getCurrentUserFullName();
-
-        if (fullName?.trim()) {
-          setUserFullName(
-            fullName.trim(),
-          );
-        } else {
-          setUserFullName("کاربر");
-        }
-      } catch (error) {
-        console.error(
-          "Get current user error:",
-          error,
+      /*
+       * اطلاعات واقعی کاربر
+       *
+       * GET /app/settings/user/
+       */
+      const userResponse =
+        await apiFetch<UserApiResponse>(
+          "/app/settings/user/",
+          {
+            method: "GET",
+          },
         );
 
-        setUserFullName("کاربر");
-      }
-    };
+      /*
+       * اشتراک واقعی کاربر
+       *
+       * GET /app/settings/plan/
+       */
+      const planResponse =
+        await apiFetch<PlanApiResponse>(
+          "/app/settings/plan/",
+          {
+            method: "GET",
+          },
+        );
 
-    loadUser();
+      setUser(userResponse);
+      setPlan(planResponse?.plan ?? null);
+    } catch (err) {
+      console.error(
+        "Load user / plan error:",
+        err,
+      );
 
-    /**
-     * اگر کاربر در قسمت دیگری از برنامه
-     * اطلاعاتش را تغییر داد، UserBlock هم
-     * بتواند خودش را به‌روزرسانی کند.
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadUserData();
+
+    /*
+     * اگر جای دیگری از برنامه اطلاعات کاربر
+     * تغییر کرد، دوباره اطلاعات API را بگیر.
      */
     const handleUserChanged = () => {
-      loadUser();
+      loadUserData();
     };
 
     window.addEventListener(
@@ -226,38 +332,151 @@ function UserBlock({
     };
   }, []);
 
-  /*
-   * قبل از mount همیشه "کاربر" نمایش داده می‌شود.
-   *
-   * بعد از mount نام واقعی از localStorage
-   * نمایش داده خواهد شد.
-   */
-  const displayName = mounted
-    ? userFullName
-    : "کاربر";
+  /* =======================================================
+     Display Name
+  ======================================================= */
 
-  const nameParts = displayName
-    .trim()
+  const firstName =
+    user?.first_name?.trim() || "";
+
+  const lastName =
+    user?.last_name?.trim() || "";
+
+  const fullName =
+    `${firstName} ${lastName}`.trim() ||
+    "کاربر";
+
+  const nameParts = fullName
     .split(/\s+/)
     .filter(Boolean);
 
-  const firstName =
+  const displayFirstName =
     nameParts[0] || "";
 
-  const lastName =
+  const displayLastName =
     nameParts.slice(1).join(" ");
 
-  /**
-   * ساخت حروف آواتار
-   *
-   * saman saman → ss
-   * نوید بنی النجار → ن‌ن
-   * علی رضایی → ع‌ر
-   */
   const initials =
-    lastName.length > 0
-      ? `${firstName.charAt(0)}${lastName.charAt(0)}`
-      : firstName.charAt(0) || "ک";
+    displayLastName.length > 0
+      ? `${displayFirstName.charAt(0)}${displayLastName.charAt(0)}`
+      : displayFirstName.charAt(0) || "ک";
+
+  /* =======================================================
+     Plan
+  ======================================================= */
+
+  const planName =
+    plan?.type_display?.trim() || "بدون اشتراک";
+
+  const remainingDays =
+    calculateRemainingDays(
+      plan?.end_date,
+    );
+
+  const isPlanActive =
+    remainingDays !== null &&
+    remainingDays > 0;
+
+  /* =======================================================
+     Loading State
+  ======================================================= */
+
+  if (loading) {
+    return (
+      <div
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-2.5",
+          compact &&
+            "border-0 bg-transparent p-1.5",
+        )}
+      >
+        <Avatar className="h-9 w-9">
+          <AvatarFallback className="bg-primary/20 text-primary">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="min-w-0 flex-1">
+          <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+
+          <div className="mt-2 h-3 w-12 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+    );
+  }
+
+  /* =======================================================
+     Error State
+  ======================================================= */
+
+  if (error) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-2.5 text-right transition-colors hover:bg-sidebar-accent/70",
+              compact &&
+                "border-0 bg-transparent p-1.5 hover:bg-sidebar-accent/40",
+            )}
+          >
+            <Avatar className="h-9 w-9">
+              <AvatarFallback className="bg-destructive/10 text-destructive">
+                !
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">
+                کاربر
+              </div>
+
+              <div className="text-[10px] text-destructive">
+                خطا در دریافت اطلاعات
+              </div>
+            </div>
+
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent
+          align="start"
+          className="w-56"
+        >
+          <DropdownMenuLabel>
+            اطلاعات کاربر
+          </DropdownMenuLabel>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onSelect={() => {
+              loadUserData();
+            }}
+          >
+            تلاش مجدد
+          </DropdownMenuItem>
+
+          <DropdownMenuItem asChild>
+            <Link
+              to="/app/settings"
+              className="cursor-pointer"
+            >
+              <Settings className="ml-2 h-4 w-4" />
+              تنظیمات پروفایل
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  /* =======================================================
+     Main User UI
+  ======================================================= */
 
   return (
     <DropdownMenu>
@@ -278,15 +497,20 @@ function UserBlock({
 
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">
-              {displayName}
+              {fullName}
             </div>
 
             <div className="flex items-center gap-1">
               <Badge
                 variant="outline"
-                className="h-4 border-primary/40 bg-primary/10 px-1.5 text-[10px] text-primary"
+                className={cn(
+                  "h-4 px-1.5 text-[10px]",
+                  isPlanActive
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-destructive/40 bg-destructive/10 text-destructive",
+                )}
               >
-                Pro Max
+                {planName}
               </Badge>
             </div>
           </div>
@@ -297,11 +521,101 @@ function UserBlock({
 
       <DropdownMenuContent
         align="start"
-        className="w-56"
+        className="w-64"
       >
         <DropdownMenuLabel>
-          حساب کاربری
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold">
+              {fullName}
+            </span>
+
+            {user?.email && (
+              <span className="truncate text-[11px] font-normal text-muted-foreground">
+                {user.email}
+              </span>
+            )}
+          </div>
         </DropdownMenuLabel>
+
+        <DropdownMenuSeparator />
+
+        {/* Subscription information */}
+        <div className="px-2 py-2">
+          <div className="rounded-lg border border-border bg-secondary/40 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                اشتراک فعلی
+              </span>
+
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px]",
+                  isPlanActive
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-destructive/40 bg-destructive/10 text-destructive",
+                )}
+              >
+                {planName}
+              </Badge>
+            </div>
+
+            {plan ? (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground">
+                      شروع اشتراک
+                    </div>
+
+                    <div className="mt-1 text-xs font-medium">
+                      {formatDate(
+                        plan.start_date,
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] text-muted-foreground">
+                      پایان اشتراک
+                    </div>
+
+                    <div className="mt-1 text-xs font-medium">
+                      {formatDate(
+                        plan.end_date,
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 border-t border-border pt-2">
+                  {isPlanActive ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground">
+                        زمان باقی‌مانده
+                      </span>
+
+                      <span className="text-xs font-semibold text-primary">
+                        {toPersianNumber(
+                          remainingDays ?? 0,
+                        )}{" "}
+                        روز
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-semibold text-destructive">
+                      اشتراک منقضی شده است
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 text-xs text-muted-foreground">
+                اشتراک فعالی برای حساب شما ثبت نشده است.
+              </div>
+            )}
+          </div>
+        </div>
 
         <DropdownMenuSeparator />
 
@@ -329,11 +643,11 @@ function UserBlock({
 
         <DropdownMenuItem
           className="cursor-pointer text-destructive focus:text-destructive"
-          onSelect={() =>
+          onSelect={() => {
             toast.success(
               "خارج شدی — به‌زودی به صفحه ورود برمی‌گردی",
-            )
-          }
+            );
+          }}
         >
           <LogOut className="ml-2 h-4 w-4" />
           خروج از حساب
@@ -342,6 +656,10 @@ function UserBlock({
     </DropdownMenu>
   );
 }
+
+/* =========================================================
+   Navigation List
+========================================================= */
 
 function NavList({
   onNavigate,
@@ -373,8 +691,7 @@ function NavList({
               <Icon
                 className={cn(
                   "h-4 w-4 shrink-0",
-                  active &&
-                    "text-primary",
+                  active && "text-primary",
                 )}
               />
 
@@ -392,6 +709,10 @@ function NavList({
     </ul>
   );
 }
+
+/* =========================================================
+   Notifications
+========================================================= */
 
 function NotificationsMenu() {
   return (
@@ -444,14 +765,11 @@ function NotificationsMenu() {
                 <div
                   className={cn(
                     "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                    n.tone ===
-                      "loss" &&
+                    n.tone === "loss" &&
                       "bg-destructive/15 text-destructive",
-                    n.tone ===
-                      "primary" &&
+                    n.tone === "primary" &&
                       "bg-primary/15 text-primary",
-                    n.tone ===
-                      "accent" &&
+                    n.tone === "accent" &&
                       "bg-accent/15 text-accent",
                   )}
                 >
@@ -480,6 +798,10 @@ function NotificationsMenu() {
   );
 }
 
+/* =========================================================
+   AppShell
+========================================================= */
+
 export function AppShell({
   children,
   title,
@@ -497,8 +819,13 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
-        {/* Desktop Sidebar */}
+        {/* =================================================
+            Desktop Sidebar
+        ================================================= */}
+
         <aside className="hidden w-64 shrink-0 border-l border-sidebar-border bg-sidebar lg:flex lg:flex-col">
+          {/* Logo */}
+
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
               <LineChart className="h-5 w-5" />
@@ -515,9 +842,13 @@ export function AppShell({
             </div>
           </div>
 
+          {/* User */}
+
           <div className="border-b border-sidebar-border p-3">
             <UserBlock />
           </div>
+
+          {/* Navigation */}
 
           <nav className="flex-1 overflow-y-auto p-3">
             <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -528,10 +859,18 @@ export function AppShell({
           </nav>
         </aside>
 
-        {/* Main */}
+        {/* =================================================
+            Main
+        ================================================= */}
+
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Topbar */}
+          {/* =================================================
+              Topbar
+          ================================================= */}
+
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
+            {/* Mobile menu */}
+
             <Sheet
               open={mobileOpen}
               onOpenChange={setMobileOpen}
@@ -554,6 +893,8 @@ export function AppShell({
                   منوی اصلی
                 </SheetTitle>
 
+                {/* Mobile Logo */}
+
                 <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
                   <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
                     <LineChart className="h-5 w-5" />
@@ -570,9 +911,13 @@ export function AppShell({
                   </div>
                 </div>
 
+                {/* Mobile User */}
+
                 <div className="border-b border-sidebar-border p-3">
                   <UserBlock />
                 </div>
+
+                {/* Mobile Navigation */}
 
                 <nav className="flex-1 overflow-y-auto p-3">
                   <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -588,7 +933,11 @@ export function AppShell({
               </SheetContent>
             </Sheet>
 
+            {/* Search + Actions */}
+
             <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
+              {/* Search */}
+
               <div className="relative min-w-0 max-w-md flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
@@ -597,6 +946,8 @@ export function AppShell({
                   className="h-10 border-border bg-secondary/60 pr-9 text-sm"
                 />
               </div>
+
+              {/* Actions */}
 
               <div className="flex shrink-0 items-center gap-2">
                 <NotificationsMenu />
@@ -629,7 +980,10 @@ export function AppShell({
             </div>
           </header>
 
-          {/* Page header */}
+          {/* =================================================
+              Page Header
+          ================================================= */}
+
           <div className="border-b border-border bg-background/40 px-4 py-6 md:px-8">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:items-center sm:justify-between">
               <div className="min-w-0">
@@ -651,6 +1005,10 @@ export function AppShell({
               )}
             </div>
           </div>
+
+          {/* =================================================
+              Page Content
+          ================================================= */}
 
           <main className="flex-1 p-4 md:p-8">
             {children}
