@@ -1,3 +1,4 @@
+
 import { Link, useLocation } from "@tanstack/react-router";
 import {
   LayoutDashboard,
@@ -17,9 +18,8 @@ import {
   Plus,
   Menu,
   ChevronDown,
-  AlertTriangle,
-  CheckCircle2,
   Loader2,
+  Circle,
 } from "lucide-react";
 import {
   useEffect,
@@ -28,6 +28,7 @@ import {
 } from "react";
 
 import { apiFetch } from "@/api/client";
+import { getNotifications, type Notification } from "@/api/notification";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -121,45 +122,6 @@ const nav = [
 ] as const;
 
 /* =========================================================
-   Notifications
-========================================================= */
-
-const notifications = [
-  {
-    id: 1,
-    icon: AlertTriangle,
-    tone: "loss",
-    title: "نزدیک به سقف ریسک روزانه",
-    desc: "به ۸۰٪ ریسک روزانه رسیدی.",
-    time: "۵ دقیقه پیش",
-  },
-  {
-    id: 2,
-    icon: BookOpen,
-    tone: "primary",
-    title: "یادآور ژورنال",
-    desc: "برای معامله T-1042 ژورنال ثبت نکردی.",
-    time: "۱ ساعت پیش",
-  },
-  {
-    id: 3,
-    icon: Trophy,
-    tone: "accent",
-    title: "نشان جدید کسب کردی",
-    desc: "«۷ روز پایبند به پلن» فعال شد.",
-    time: "دیروز",
-  },
-  {
-    id: 4,
-    icon: CheckCircle2,
-    tone: "primary",
-    title: "گزارش هفتگی آماده است",
-    desc: "مربی هوشمند گزارش هفتگی‌ات را ساخت.",
-    time: "۲ روز پیش",
-  },
-];
-
-/* =========================================================
    API Types
 ========================================================= */
 
@@ -185,14 +147,20 @@ type PlanApiResponse = {
    Helpers
 ========================================================= */
 
-function toPersianNumber(value: string | number): string {
+function toPersianNumber(
+  value: string | number,
+): string {
   return String(value).replace(/\d/g, (digit) => {
     return "۰۱۲۳۴۵۶۷۸۹"[Number(digit)];
   });
 }
 
-function formatDate(dateString?: string): string {
-  if (!dateString) return "—";
+function formatDate(
+  dateString?: string,
+): string {
+  if (!dateString) {
+    return "—";
+  }
 
   const parts = dateString.split("-");
 
@@ -202,22 +170,22 @@ function formatDate(dateString?: string): string {
 
   const [year, month, day] = parts;
 
-  /*
-   * API تاریخ میلادی می‌دهد.
-   * فعلاً همان تاریخ را به شکل خوانا نمایش می‌دهیم.
-   *
-   * اگر در پروژه تبدیل دقیق میلادی به شمسی داری،
-   * می‌توانیم این قسمت را با همان سیستم پروژه هماهنگ کنیم.
-   */
-  return toPersianNumber(`${year}/${month}/${day}`);
+  return toPersianNumber(
+    `${year}/${month}/${day}`,
+  );
 }
 
 function calculateRemainingDays(
   endDate?: string,
 ): number | null {
-  if (!endDate) return null;
+  if (!endDate) {
+    return null;
+  }
 
-  const end = new Date(`${endDate}T23:59:59`);
+  const end = new Date(
+    `${endDate}T23:59:59`,
+  );
+
   const now = new Date();
 
   const diff =
@@ -229,6 +197,126 @@ function calculateRemainingDays(
 
   return Math.ceil(
     diff / (1000 * 60 * 60 * 24),
+  );
+}
+
+/**
+ * تبدیل تاریخ API به متن فارسی
+ */
+function formatNotificationTime(
+  dateString?: string,
+): string {
+  if (!dateString) {
+    return "";
+  }
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const now = new Date();
+
+  const diffMs =
+    now.getTime() - date.getTime();
+
+  const diffMinutes = Math.floor(
+    diffMs / (1000 * 60),
+  );
+
+  if (diffMinutes < 1) {
+    return "همین الان";
+  }
+
+  if (diffMinutes < 60) {
+    return `${toPersianNumber(diffMinutes)} دقیقه پیش`;
+  }
+
+  const diffHours = Math.floor(
+    diffMinutes / 60,
+  );
+
+  if (diffHours < 24) {
+    return `${toPersianNumber(diffHours)} ساعت پیش`;
+  }
+
+  const diffDays = Math.floor(
+    diffHours / 24,
+  );
+
+  if (diffDays < 7) {
+    return `${toPersianNumber(diffDays)} روز پیش`;
+  }
+
+  return new Intl.DateTimeFormat(
+    "fa-IR",
+    {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    },
+  ).format(date);
+}
+
+/**
+ * آیکون اعلان
+ */
+function NotificationIcon({
+  notification,
+}: {
+  notification: Notification;
+}) {
+  const icon =
+    String(notification.icon ?? "")
+      .trim()
+      .toLowerCase();
+
+  if (
+    icon.includes("warning") ||
+    icon.includes("alert") ||
+    icon.includes("risk")
+  ) {
+    return (
+      <span className="text-lg">
+        ⚠️
+      </span>
+    );
+  }
+
+  if (
+    icon.includes("success") ||
+    icon.includes("check")
+  ) {
+    return (
+      <span className="text-lg">
+        ✅
+      </span>
+    );
+  }
+
+  if (
+    icon.includes("trophy") ||
+    icon.includes("achievement")
+  ) {
+    return (
+      <span className="text-lg">
+        🏆
+      </span>
+    );
+  }
+
+  if (
+    icon.includes("journal") ||
+    icon.includes("book")
+  ) {
+    return (
+      <BookOpen className="h-4 w-4" />
+    );
+  }
+
+  return (
+    <Bell className="h-4 w-4" />
   );
 }
 
@@ -258,11 +346,6 @@ function UserBlock({
       setLoading(true);
       setError(false);
 
-      /*
-       * اطلاعات واقعی کاربر
-       *
-       * GET /app/settings/user/
-       */
       const userResponse =
         await apiFetch<UserApiResponse>(
           "/app/settings/user/",
@@ -271,11 +354,6 @@ function UserBlock({
           },
         );
 
-      /*
-       * اشتراک واقعی کاربر
-       *
-       * GET /app/settings/plan/
-       */
       const planResponse =
         await apiFetch<PlanApiResponse>(
           "/app/settings/plan/",
@@ -285,7 +363,9 @@ function UserBlock({
         );
 
       setUser(userResponse);
-      setPlan(planResponse?.plan ?? null);
+      setPlan(
+        planResponse?.plan ?? null,
+      );
     } catch (err) {
       console.error(
         "Load user / plan error:",
@@ -299,14 +379,10 @@ function UserBlock({
   }
 
   useEffect(() => {
-    loadUserData();
+    void loadUserData();
 
-    /*
-     * اگر جای دیگری از برنامه اطلاعات کاربر
-     * تغییر کرد، دوباره اطلاعات API را بگیر.
-     */
     const handleUserChanged = () => {
-      loadUserData();
+      void loadUserData();
     };
 
     window.addEventListener(
@@ -366,7 +442,8 @@ function UserBlock({
   ======================================================= */
 
   const planName =
-    plan?.type_display?.trim() || "بدون اشتراک";
+    plan?.type_display?.trim() ||
+    "بدون اشتراک";
 
   const remainingDays =
     calculateRemainingDays(
@@ -454,7 +531,7 @@ function UserBlock({
           <DropdownMenuItem
             className="cursor-pointer"
             onSelect={() => {
-              loadUserData();
+              void loadUserData();
             }}
           >
             تلاش مجدد
@@ -539,7 +616,6 @@ function UserBlock({
 
         <DropdownMenuSeparator />
 
-        {/* Subscription information */}
         <div className="px-2 py-2">
           <div className="rounded-lg border border-border bg-secondary/40 p-3">
             <div className="flex items-center justify-between">
@@ -715,8 +791,63 @@ function NavList({
 ========================================================= */
 
 function NotificationsMenu() {
+  const [notifications, setNotifications] =
+    useState<Notification[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [open, setOpen] =
+    useState(false);
+
+  async function loadNotifications() {
+    try {
+      setLoading(true);
+
+      const data =
+        await getNotifications();
+
+      console.log(
+        "Notifications from API:",
+        data,
+      );
+
+      setNotifications(
+        Array.isArray(data) ? data : [],
+      );
+    } catch (error) {
+      console.error(
+        "Get notifications error:",
+        error,
+      );
+
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadNotifications();
+  }, []);
+
+  const activeNotifications =
+    notifications.filter(
+      (notification) =>
+        notification.is_active !== false,
+    );
+
+  const unreadCount =
+    activeNotifications.filter(
+      (notification) =>
+        notification.is_read === false,
+    ).length;
+
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      open={open}
+      onOpenChange={setOpen}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
@@ -725,9 +856,13 @@ function NotificationsMenu() {
         >
           <Bell className="h-4 w-4" />
 
-          <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
-            {notifications.length}
-          </span>
+          {unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
+              {toPersianNumber(
+                unreadCount,
+              )}
+            </span>
+          )}
         </Button>
       </DropdownMenuTrigger>
 
@@ -736,63 +871,99 @@ function NotificationsMenu() {
         className="w-80"
       >
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>اعلان‌ها</span>
+          <span>
+            اعلان‌ها
+          </span>
 
-          <button
-            type="button"
-            onClick={() =>
-              toast.success(
-                "همه اعلان‌ها خوانده شد",
-              )
-            }
-            className="text-[11px] text-primary hover:underline"
-          >
-            علامت‌گذاری همه
-          </button>
+          {unreadCount > 0 && (
+            <span className="text-[11px] text-muted-foreground">
+              {toPersianNumber(
+                unreadCount,
+              )}{" "}
+              خوانده‌نشده
+            </span>
+          )}
         </DropdownMenuLabel>
 
         <DropdownMenuSeparator />
 
-        <div className="max-h-80 overflow-y-auto">
-          {notifications.map((n) => {
-            const Icon = n.icon;
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            در حال دریافت اعلان‌ها...
+          </div>
+        ) : activeNotifications.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            اعلان جدیدی وجود ندارد.
+          </div>
+        ) : (
+          <div className="max-h-80 overflow-y-auto">
+            {activeNotifications.map(
+              (notification) => {
+                const isUnread =
+                  notification.is_read ===
+                  false;
 
-            return (
-              <DropdownMenuItem
-                key={n.id}
-                className="cursor-pointer items-start gap-3 py-2.5"
-              >
-                <div
-                  className={cn(
-                    "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-                    n.tone === "loss" &&
-                      "bg-destructive/15 text-destructive",
-                    n.tone === "primary" &&
-                      "bg-primary/15 text-primary",
-                    n.tone === "accent" &&
-                      "bg-accent/15 text-accent",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
+                return (
+                  <DropdownMenuItem
+                    key={notification.id}
+                    className={cn(
+                      "cursor-pointer items-start gap-3 py-3",
+                      isUnread &&
+                        "bg-primary/5",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+                        isUnread
+                          ? "bg-primary/15 text-primary"
+                          : "bg-secondary text-muted-foreground",
+                      )}
+                    >
+                      <NotificationIcon
+                        notification={
+                          notification
+                        }
+                      />
 
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">
-                    {n.title}
-                  </div>
+                      {isUnread && (
+                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
+                      )}
+                    </div>
 
-                  <div className="text-xs text-muted-foreground">
-                    {n.desc}
-                  </div>
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className={cn(
+                          "truncate text-sm",
+                          isUnread
+                            ? "font-bold text-foreground"
+                            : "font-medium",
+                        )}
+                      >
+                        {notification.title}
+                      </div>
 
-                  <div className="mt-1 text-[10px] text-muted-foreground/70">
-                    {n.time}
-                  </div>
-                </div>
-              </DropdownMenuItem>
-            );
-          })}
-        </div>
+                      <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                        {notification.body}
+                      </div>
+
+                      <div className="mt-1 text-[10px] text-muted-foreground/70">
+                        {formatNotificationTime(
+                          notification.created_at,
+                        )}
+                      </div>
+                    </div>
+
+                    {isUnread && (
+                      <Circle className="mt-1 h-2 w-2 shrink-0 fill-primary text-primary" />
+                    )}
+                  </DropdownMenuItem>
+                );
+              },
+            )}
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -819,11 +990,13 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
+
         {/* =================================================
             Desktop Sidebar
         ================================================= */}
 
         <aside className="hidden w-64 shrink-0 border-l border-sidebar-border bg-sidebar lg:flex lg:flex-col">
+
           {/* Logo */}
 
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
@@ -864,11 +1037,13 @@ export function AppShell({
         ================================================= */}
 
         <div className="flex min-w-0 flex-1 flex-col">
+
           {/* =================================================
               Topbar
           ================================================= */}
 
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
+
             {/* Mobile menu */}
 
             <Sheet
@@ -936,6 +1111,7 @@ export function AppShell({
             {/* Search + Actions */}
 
             <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
+
               {/* Search */}
 
               <div className="relative min-w-0 max-w-md flex-1">
@@ -950,6 +1126,7 @@ export function AppShell({
               {/* Actions */}
 
               <div className="flex shrink-0 items-center gap-2">
+
                 <NotificationsMenu />
 
                 <Link
@@ -976,6 +1153,7 @@ export function AppShell({
                     <Plus className="h-4 w-4" />
                   </Button>
                 </Link>
+
               </div>
             </div>
           </header>
@@ -986,6 +1164,7 @@ export function AppShell({
 
           <div className="border-b border-border bg-background/40 px-4 py-6 md:px-8">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:items-center sm:justify-between">
+
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-bold tracking-tight">
                   {title}
@@ -1003,6 +1182,7 @@ export function AppShell({
                   {actions}
                 </div>
               )}
+
             </div>
           </div>
 
@@ -1013,6 +1193,7 @@ export function AppShell({
           <main className="flex-1 p-4 md:p-8">
             {children}
           </main>
+
         </div>
       </div>
     </div>
