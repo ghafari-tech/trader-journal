@@ -1319,6 +1319,7 @@
 //   );
 // }
 
+
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
@@ -1383,25 +1384,24 @@ function Portfolios() {
   const [updating, setUpdating] = useState(false);
   const [archiving, setArchiving] = useState(false);
 
-  // دیالوگ ساخت
+  // ساخت
   const [open, setOpen] = useState(false);
 
-  // دیالوگ حذف
+  // حذف
   const [portfolioToDelete, setPortfolioToDelete] =
     useState<Portfolio | null>(null);
 
-  // دیالوگ ویرایش
+  // ویرایش
   const [portfolioToEdit, setPortfolioToEdit] =
     useState<Portfolio | null>(null);
 
-  // دیالوگ آرشیو
+  // آرشیو
   const [portfolioToArchive, setPortfolioToArchive] =
     useState<Portfolio | null>(null);
 
   // جلوگیری از برگشت آیتم آرشیوشده
-  const [archivedIds, setArchivedIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [archivedIds, setArchivedIds] =
+    useState<Set<string>>(() => new Set());
 
   // فرم
   const [name, setName] = useState("");
@@ -1440,7 +1440,7 @@ function Portfolios() {
   }, []);
 
   /**
-   * پاک کردن فرم
+   * ریست فرم
    */
   function resetForm() {
     setName("");
@@ -1504,7 +1504,7 @@ function Portfolios() {
   }
 
   /**
-   * باز کردن فرم ویرایش
+   * باز کردن ویرایش
    */
   function openEditPortfolio(portfolio: Portfolio) {
     setPortfolioToEdit(portfolio);
@@ -1522,9 +1522,7 @@ function Portfolios() {
   async function submitEdit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!portfolioToEdit) {
-      return;
-    }
+    if (!portfolioToEdit) return;
 
     if (!name.trim() || !broker.trim()) {
       toast.error("نام و بروکر الزامی است");
@@ -1584,31 +1582,24 @@ function Portfolios() {
   }
 
   /**
-   * آرشیو واقعی
+   * آرشیو
    */
   async function confirmArchivePortfolio() {
-    if (!portfolioToArchive) {
-      return;
-    }
+    if (!portfolioToArchive) return;
 
     try {
       setArchiving(true);
 
       const id = String(portfolioToArchive.id);
-      const portfolioName = portfolioToArchive.name;
-
-      console.log("Archiving portfolio:", id);
 
       await archivePortfolio(portfolioToArchive.id);
 
-      // نگه داشتن ID آرشیوشده
       setArchivedIds((current) => {
         const next = new Set(current);
         next.add(id);
         return next;
       });
 
-      // حذف فوری از صفحه
       setPortfolios((current) =>
         current.filter(
           (p) => String(p.id) !== id,
@@ -1616,12 +1607,11 @@ function Portfolios() {
       );
 
       toast.success(
-        `پرتفولیو «${portfolioName}» آرشیو شد`,
+        `پرتفولیو «${portfolioToArchive.name}» آرشیو شد`,
       );
 
       setPortfolioToArchive(null);
 
-      // دریافت مجدد اطلاعات واقعی سرور
       await loadPortfolios();
     } catch (error) {
       console.error(
@@ -1647,29 +1637,26 @@ function Portfolios() {
   }
 
   /**
-   * حذف واقعی
+   * حذف
    */
   async function confirmDeletePortfolio() {
-    if (!portfolioToDelete) {
-      return;
-    }
+    if (!portfolioToDelete) return;
 
     try {
       setDeleting(true);
 
       const id = portfolioToDelete.id;
-      const portfolioName = portfolioToDelete.name;
 
       await deletePortfolio(id);
+
+      toast.success(
+        `پرتفولیو «${portfolioToDelete.name}» حذف شد`,
+      );
 
       setPortfolios((current) =>
         current.filter(
           (p) => p.id !== id,
         ),
-      );
-
-      toast.success(
-        `پرتفولیو «${portfolioName}» حذف شد`,
       );
 
       setPortfolioToDelete(null);
@@ -1690,7 +1677,7 @@ function Portfolios() {
   }
 
   /**
-   * پرتفولیوهای فعال
+   * فقط پرتفولیوهای فعال
    */
   const activePortfolios = portfolios.filter((p) => {
     const id = String(p.id);
@@ -1752,23 +1739,15 @@ function Portfolios() {
 
           <DialogContent
             dir="rtl"
-            className="
-              w-[calc(100%-1.5rem)]
-              max-w-lg
-              max-h-[90vh]
-              overflow-y-auto
-              rounded-2xl
-              p-4
-              sm:p-6
-            "
+            className="w-[calc(100%-2rem)] max-w-lg text-right"
           >
             <form onSubmit={submit}>
               <DialogHeader className="text-right">
-                <DialogTitle className="text-right text-lg sm:text-xl">
+                <DialogTitle>
                   پرتفولیو جدید
                 </DialogTitle>
 
-                <DialogDescription className="pt-2 text-right leading-7">
+                <DialogDescription>
                   یک حساب معاملاتی جدید اضافه کن.
                   بعداً می‌توانی به MT4/MT5 متصل کنی.
                 </DialogDescription>
@@ -1875,22 +1854,12 @@ function Portfolios() {
                 </div>
               </div>
 
-              <DialogFooter
-                className="
-                  mt-6
-                  flex
-                  flex-col-reverse
-                  gap-2
-                  sm:flex-row
-                  sm:justify-start
-                "
-              >
+              <DialogFooter className="mt-6 flex flex-row gap-2">
                 <DialogClose asChild>
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={creating}
-                    className="w-full sm:w-auto"
+                    className="flex-1"
                   >
                     انصراف
                   </Button>
@@ -1899,7 +1868,7 @@ function Portfolios() {
                 <Button
                   type="submit"
                   disabled={creating}
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
+                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {creating
                     ? "در حال ساخت..."
@@ -1911,9 +1880,6 @@ function Portfolios() {
         </Dialog>
       }
     >
-      {/* =========================
-          لیست
-         ========================= */}
       {loading ? (
         <div className="flex min-h-40 items-center justify-center">
           <div className="text-sm text-muted-foreground">
@@ -1937,59 +1903,50 @@ function Portfolios() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {activePortfolios.map((p) => {
-            const currentBalance =
+            const balance =
               Number(p.balance) || 0;
 
-            const initialBalance =
+            const initial =
               Number(
-                p.initial ?? p.balance,
+                p.initial ??
+                  p.balance,
               ) || 0;
 
             const pnl =
-              currentBalance -
-              initialBalance;
+              balance - initial;
 
             const pct =
-              initialBalance
-                ? (pnl / initialBalance) *
-                  100
+              initial
+                ? (pnl / initial) * 100
                 : 0;
 
             return (
               <div
                 key={p.id}
-                className="
-                  card-surface
-                  min-w-0
-                  p-4
-                  transition-all
-                  hover:border-primary/40
-                  sm:p-5
-                "
+                className="card-surface p-5 transition-all hover:border-primary/40"
               >
                 {/* Header */}
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-primary">
                       <Wallet className="h-5 w-5" />
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="truncate font-semibold">
+                    <div>
+                      <div className="font-semibold">
                         {p.name}
                       </div>
 
-                      <div className="truncate text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground">
                         {p.broker}
                       </div>
                     </div>
                   </div>
 
                   <Button
-                    type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 shrink-0"
+                    className="h-8 w-8"
                     onClick={() =>
                       toast.info(
                         "منوی گزینه‌ها به‌زودی",
@@ -2001,31 +1958,34 @@ function Portfolios() {
                 </div>
 
                 {/* Balance / PNL */}
-                <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
-                  <div className="min-w-0 rounded-lg bg-secondary/40 p-3">
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-secondary/40 p-3">
                     <div className="text-[11px] text-muted-foreground">
                       موجودی فعلی
                     </div>
 
-                    <div className="mt-1 truncate text-base font-bold tabular sm:text-lg">
+                    <div className="mt-1 text-lg font-bold tabular">
                       $
-                      {currentBalance.toLocaleString()}
+                      {balance.toLocaleString()}
                     </div>
                   </div>
 
-                  <div className="min-w-0 rounded-lg bg-secondary/40 p-3">
+                  <div className="rounded-lg bg-secondary/40 p-3">
                     <div className="text-[11px] text-muted-foreground">
                       سود / زیان
                     </div>
 
                     <div
-                      className={`mt-1 truncate text-base font-bold tabular sm:text-lg ${
+                      className={`mt-1 text-lg font-bold tabular ${
                         pnl >= 0
                           ? "gain"
                           : "loss"
                       }`}
                     >
-                      {pnl >= 0 ? "+" : "-"}$
+                      {pnl >= 0
+                        ? "+"
+                        : "-"}
+                      $
                       {Math.abs(
                         pnl,
                       ).toLocaleString()}
@@ -2034,8 +1994,8 @@ function Portfolios() {
                 </div>
 
                 {/* اطلاعات */}
-                <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] sm:text-xs">
-                  <div className="min-w-0">
+                <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                  <div>
                     <span className="text-muted-foreground">
                       لوریج:
                     </span>{" "}
@@ -2044,14 +2004,14 @@ function Portfolios() {
                     </span>
                   </div>
 
-                  <div className="min-w-0">
+                  <div>
                     <span className="text-muted-foreground">
                       ارز:
                     </span>{" "}
                     {p.currency}
                   </div>
 
-                  <div className="min-w-0">
+                  <div>
                     <span className="text-muted-foreground">
                       معاملات:
                     </span>{" "}
@@ -2081,34 +2041,30 @@ function Portfolios() {
                         : "loss"
                     }`}
                   >
-                    {pct >= 0 ? "+" : ""}
+                    {pct >= 0
+                      ? "+"
+                      : ""}
                     {pct.toFixed(2)}٪
                   </div>
                 </div>
 
                 {/* Buttons */}
-                <div className="mt-4 grid grid-cols-[1fr_auto_auto_auto] gap-2">
-                  {/* اتصال MT */}
+                <div className="mt-4 flex gap-2">
                   <Button
-                    type="button"
                     size="sm"
                     variant="outline"
-                    className="min-w-0"
+                    className="flex-1"
                     onClick={() =>
                       toast.success(
                         `اتصال ${p.name} به متاتریدر شروع شد`,
                       )
                     }
                   >
-                    <Link2 className="ml-1 h-3 w-3 shrink-0" />
-                    <span className="truncate">
-                      اتصال MT
-                    </span>
+                    <Link2 className="ml-1 h-3 w-3" />
+                    اتصال MT
                   </Button>
 
-                  {/* ویرایش */}
                   <Button
-                    type="button"
                     size="sm"
                     variant="outline"
                     title="ویرایش پرتفولیو"
@@ -2119,9 +2075,7 @@ function Portfolios() {
                     <Edit className="h-3 w-3" />
                   </Button>
 
-                  {/* آرشیو */}
                   <Button
-                    type="button"
                     size="sm"
                     variant="outline"
                     title="آرشیو پرتفولیو"
@@ -2129,33 +2083,19 @@ function Portfolios() {
                     onClick={() =>
                       askArchivePortfolio(p)
                     }
-                    className="
-                      border-yellow-500/40
-                      text-yellow-600
-                      hover:bg-yellow-500/10
-                      hover:text-yellow-600
-                      dark:text-yellow-400
-                      dark:hover:text-yellow-400
-                    "
+                    className="border-yellow-500/40 text-yellow-600 hover:bg-yellow-500/10 hover:text-yellow-600 dark:text-yellow-400 dark:hover:text-yellow-400"
                   >
                     <Archive className="h-3 w-3" />
                   </Button>
 
-                  {/* حذف */}
                   <Button
-                    type="button"
                     size="sm"
                     variant="outline"
                     title="حذف پرتفولیو"
                     onClick={() =>
                       askDeletePortfolio(p)
                     }
-                    className="
-                      border-red-500/40
-                      text-red-500
-                      hover:bg-red-500/10
-                      hover:text-red-500
-                    "
+                    className="border-red-400/40 text-red-500 hover:bg-red-500/10 hover:text-red-500"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -2166,9 +2106,9 @@ function Portfolios() {
         </div>
       )}
 
-      {/* =====================================================
+      {/* =====================================
           ویرایش پرتفولیو
-         ===================================================== */}
+         ===================================== */}
       <Dialog
         open={!!portfolioToEdit}
         onOpenChange={(value) => {
@@ -2180,20 +2120,11 @@ function Portfolios() {
       >
         <DialogContent
           dir="rtl"
-          className="
-            w-[calc(100%-1.5rem)]
-            max-w-lg
-            max-h-[90vh]
-            overflow-y-auto
-            rounded-2xl
-            p-4
-            text-right
-            sm:p-6
-          "
+          className="w-[calc(100%-2rem)] max-w-lg text-right"
         >
           <form onSubmit={submitEdit}>
             <DialogHeader className="text-right">
-              <DialogTitle className="text-right text-lg font-bold sm:text-xl">
+              <DialogTitle className="text-right text-xl font-bold">
                 ویرایش پرتفولیو
               </DialogTitle>
 
@@ -2302,16 +2233,7 @@ function Portfolios() {
               </div>
             </div>
 
-            <DialogFooter
-              className="
-                mt-6
-                flex
-                flex-col-reverse
-                gap-2
-                sm:flex-row
-                sm:justify-start
-              "
-            >
+            <DialogFooter className="mt-6 flex flex-row gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -2320,7 +2242,7 @@ function Portfolios() {
                   setPortfolioToEdit(null);
                   resetForm();
                 }}
-                className="w-full sm:w-auto"
+                className="flex-1"
               >
                 انصراف
               </Button>
@@ -2328,7 +2250,7 @@ function Portfolios() {
               <Button
                 type="submit"
                 disabled={updating}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {updating
                   ? "در حال ذخیره..."
@@ -2339,9 +2261,9 @@ function Portfolios() {
         </DialogContent>
       </Dialog>
 
-      {/* =====================================================
+      {/* =====================================
           تأیید آرشیو
-         ===================================================== */}
+         ===================================== */}
       <Dialog
         open={!!portfolioToArchive}
         onOpenChange={(value) => {
@@ -2352,29 +2274,20 @@ function Portfolios() {
       >
         <DialogContent
           dir="rtl"
-          className="
-            w-[calc(100%-1.5rem)]
-            max-w-md
-            max-h-[90vh]
-            overflow-y-auto
-            rounded-2xl
-            p-4
-            text-right
-            sm:p-6
-          "
+          className="w-[calc(100%-2rem)] max-w-md text-right"
         >
           <DialogHeader className="text-right">
             <DialogTitle className="flex items-center gap-3 text-right text-lg font-bold">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-500/15 text-xl">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-500/15 text-lg">
                 📦
               </span>
 
-              <span className="min-w-0">
+              <span>
                 آرشیو پرتفولیو
               </span>
             </DialogTitle>
 
-            <DialogDescription className="pt-4 text-right text-sm leading-8">
+            <DialogDescription className="pt-4 text-right text-sm leading-7">
               آیا مطمئن هستید که می‌خواهید
               پرتفولیوی{" "}
               <span className="font-bold text-foreground">
@@ -2383,58 +2296,23 @@ function Portfolios() {
               را آرشیو کنید؟
             </DialogDescription>
 
-            <div
-              className="
-                mt-3
-                rounded-lg
-                border
-                border-yellow-500/20
-                bg-yellow-500/10
-                px-3
-                py-3
-                text-right
-                text-sm
-                font-medium
-                leading-7
-                text-yellow-600
-                dark:text-yellow-400
-              "
-            >
-              <span className="font-bold">
-                📦 توجه:
-              </span>{" "}
-              پرتفولیو حذف نمی‌شود و اطلاعات
-              آن در سیستم باقی می‌ماند؛ فقط
-              از لیست پرتفولیوهای فعال خارج می‌شود.
+            <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2.5 text-right text-xs leading-6 text-yellow-700 dark:text-yellow-400">
+              اطلاعات پرتفولیو حذف نمی‌شود و
+              فقط از لیست پرتفولیوهای فعال خارج خواهد شد.
             </div>
           </DialogHeader>
 
-          <DialogFooter
-            className="
-              mt-5
-              flex
-              flex-col-reverse
-              gap-2
-              sm:flex-row
-              sm:justify-start
-            "
-          >
+          {/* فقط بله / خیر */}
+          <DialogFooter className="mt-5 flex flex-row gap-2">
             <Button
               type="button"
               disabled={archiving}
               onClick={confirmArchivePortfolio}
-              className="
-                w-full
-                bg-yellow-500
-                font-semibold
-                text-black
-                hover:bg-yellow-500/90
-                sm:w-auto
-              "
+              className="flex-1 bg-yellow-500 font-semibold text-black hover:bg-yellow-500/90"
             >
               {archiving
                 ? "در حال آرشیو..."
-                : "بله، آرشیو کن"}
+                : "بله"}
             </Button>
 
             <Button
@@ -2444,17 +2322,17 @@ function Portfolios() {
               onClick={() =>
                 setPortfolioToArchive(null)
               }
-              className="w-full sm:w-auto"
+              className="flex-1"
             >
-              انصراف
+              خیر
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* =====================================================
+      {/* =====================================
           تأیید حذف
-         ===================================================== */}
+         ===================================== */}
       <Dialog
         open={!!portfolioToDelete}
         onOpenChange={(value) => {
@@ -2465,29 +2343,20 @@ function Portfolios() {
       >
         <DialogContent
           dir="rtl"
-          className="
-            w-[calc(100%-1.5rem)]
-            max-w-md
-            max-h-[90vh]
-            overflow-y-auto
-            rounded-2xl
-            p-4
-            text-right
-            sm:p-6
-          "
+          className="w-[calc(100%-2rem)] max-w-md text-right"
         >
           <DialogHeader className="text-right">
             <DialogTitle className="flex items-center gap-3 text-right text-lg font-bold">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-xl">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-lg">
                 ⚠️
               </span>
 
-              <span className="min-w-0">
-                تأیید حذف پرتفولیو
+              <span>
+                حذف پرتفولیو
               </span>
             </DialogTitle>
 
-            <DialogDescription className="pt-4 text-right text-sm leading-8">
+            <DialogDescription className="pt-4 text-right text-sm leading-7">
               آیا مطمئن هستید که می‌خواهید
               پرتفولیوی{" "}
               <span className="font-bold text-foreground">
@@ -2496,57 +2365,26 @@ function Portfolios() {
               را حذف کنید؟
             </DialogDescription>
 
-            <div
-              className="
-                mt-3
-                rounded-lg
-                border
-                border-red-500/20
-                bg-red-500/10
-                px-3
-                py-3
-                text-right
-                text-sm
-                font-medium
-                leading-7
-                text-red-600
-                dark:text-red-400
-              "
-            >
+            <div className="mt-3 rounded-lg border border-red-500/15 bg-red-500/5 px-3 py-2.5 text-right text-xs leading-6 text-red-600 dark:text-red-400">
               <span className="font-bold">
-                ⚠️ توجه:
+                توجه:
               </span>{" "}
-              پس از حذف، اطلاعات این
-              پرتفولیو قابل بازگردانی نخواهد بود.
+              پس از حذف، اطلاعات این پرتفولیو
+              قابل بازگردانی نخواهد بود.
             </div>
           </DialogHeader>
 
-          <DialogFooter
-            className="
-              mt-5
-              flex
-              flex-col-reverse
-              gap-2
-              sm:flex-row
-              sm:justify-start
-            "
-          >
+          {/* فقط بله / خیر */}
+          <DialogFooter className="mt-5 flex flex-row gap-2">
             <Button
               type="button"
               disabled={deleting}
               onClick={confirmDeletePortfolio}
-              className="
-                w-full
-                bg-red-500
-                font-semibold
-                text-white
-                hover:bg-red-500/90
-                sm:w-auto
-              "
+              className="flex-1 bg-red-500 font-semibold text-white hover:bg-red-600"
             >
               {deleting
                 ? "در حال حذف..."
-                : "بله، حذف کن"}
+                : "بله"}
             </Button>
 
             <Button
@@ -2556,9 +2394,9 @@ function Portfolios() {
               onClick={() =>
                 setPortfolioToDelete(null)
               }
-              className="w-full font-semibold sm:w-auto"
+              className="flex-1"
             >
-              خیر، انصراف
+              خیر
             </Button>
           </DialogFooter>
         </DialogContent>
