@@ -1,3 +1,4 @@
+
 import { createFileRoute } from "@tanstack/react-router";
 
 import {
@@ -6,13 +7,16 @@ import {
   Wallet,
   Archive,
   Edit,
-  Link2,
   Trash2,
   X,
   Check,
 } from "lucide-react";
 
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -42,9 +46,11 @@ import {
 import {
   createPortfolio,
   getPortfolios,
+  getArchivedPortfolios,
   deletePortfolio,
   updatePortfolio,
   archivePortfolio,
+  activatePortfolio as activatePortfolioApi,
   type Portfolio,
 } from "@/api/portfolio";
 
@@ -57,59 +63,114 @@ export const Route = createFileRoute("/app/portfolios")({
   component: Portfolios,
 });
 
-const ACTIVE_PORTFOLIO_STORAGE_KEY = "traderjournal-active-portfolio";
+/**
+ * این کلید باید در تمام صفحات پروژه یکسان باشد.
+ * صفحه معاملات نیز دقیقاً از همین کلید استفاده می‌کند.
+ */
+export const ACTIVE_PORTFOLIO_STORAGE_KEY =
+  "traderjournal-active-portfolio";
+
+/**
+ * چون localStorage در همان تب Event نوع storage را ایجاد نمی‌کند،
+ * برای هماهنگ شدن صفحات داخل همان تب از این Event استفاده می‌کنیم.
+ */
+export const ACTIVE_PORTFOLIO_CHANGED_EVENT =
+  "traderjournal-active-portfolio-changed";
+
+/**
+ * اطلاع‌رسانی به سایر بخش‌های برنامه که پرتفولیوی فعال تغییر کرده است.
+ */
+function notifyActivePortfolioChanged() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new Event(
+      ACTIVE_PORTFOLIO_CHANGED_EVENT,
+    ),
+  );
+}
 
 function Portfolios() {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [portfolios, setPortfolios] = useState<
+    Portfolio[]
+  >([]);
+
+  const [archivedPortfolios, setArchivedPortfolios] =
+    useState<Portfolio[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [archivedLoading, setArchivedLoading] =
+    useState(false);
+
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [activatingId, setActivatingId] =
+    useState<string | null>(null);
 
-  // پرتفولیو فعال
-  const [activePortfolioId, setActivePortfolioId] = useState<string | null>(
-    null,
-  );
+  const [activePortfolioId, setActivePortfolioId] =
+    useState<string | null>(() =>
+      typeof window !== "undefined"
+        ? localStorage.getItem(
+            ACTIVE_PORTFOLIO_STORAGE_KEY,
+          )
+        : null,
+    );
 
-  // دیالوگ ساخت
   const [open, setOpen] = useState(false);
+  const [archivedOpen, setArchivedOpen] =
+    useState(false);
 
-  // دیالوگ آرشیوها
-  const [archivedOpen, setArchivedOpen] = useState(false);
-
-  // دیالوگ حذف
   const [portfolioToDelete, setPortfolioToDelete] =
     useState<Portfolio | null>(null);
 
-  // دیالوگ ویرایش
   const [portfolioToEdit, setPortfolioToEdit] =
     useState<Portfolio | null>(null);
 
-  // دیالوگ آرشیو
   const [portfolioToArchive, setPortfolioToArchive] =
     useState<Portfolio | null>(null);
 
-  // جلوگیری از برگشت آیتم آرشیوشده
-  const [archivedIds, setArchivedIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-
-  // پرتفولیوهای آرشیوشده‌ای که از API فعلی برنمی‌گردند
-  const [savedArchivedPortfolios, setSavedArchivedPortfolios] = useState<
-    Portfolio[]
-  >([]);
-
-  // فرم
   const [name, setName] = useState("");
   const [broker, setBroker] = useState("");
   const [balance, setBalance] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [leverage, setLeverage] = useState("1:100");
+  const [leverage, setLeverage] =
+    useState("1:100");
 
   /**
-   * دریافت پرتفولیوها
+   * تشخیص آرشیو بودن
+   */
+  function isPortfolioArchived(
+    portfolio: Portfolio,
+  ) {
+    if (portfolio.is_archived === true) {
+      return true;
+    }
+
+    if (portfolio.archived === true) {
+      return true;
+    }
+
+    const status = String(
+      portfolio.status ?? "",
+    )
+      .trim()
+      .toLowerCase();
+
+    return [
+      "archived",
+      "archive",
+      "آرشیو",
+      "آرشیو شده",
+      "آرشیوشده",
+    ].includes(status);
+  }
+
+  /**
+   * دریافت پرتفولیوهای فعال
    */
   async function loadPortfolios() {
     try {
@@ -117,36 +178,50 @@ function Portfolios() {
 
       const data = await getPortfolios();
 
-      console.log("Portfolios from API:", data);
+      const list = Array.isArray(data) ? data : [];
 
-      const allPortfolios = Array.isArray(data) ? data : [];
-
-      const apiArchived = allPortfolios.filter((portfolio) =>
-        isPortfolioArchived(portfolio),
+      const activeList = list.filter(
+        (portfolio) =>
+          !isPortfolioArchived(portfolio),
       );
 
-      const apiActive = allPortfolios.filter(
-        (portfolio) => !isPortfolioArchived(portfolio),
+      setPortfolios(activeList);
+
+      const backendActive = activeList.find(
+        (portfolio) =>
+          portfolio.is_active === true,
       );
 
-      setPortfolios(apiActive);
+      if (backendActive) {
+        const id = String(backendActive.id);
 
-      // پرتفولیوهای آرشیوشده قبلی را حفظ می‌کنیم
-      setSavedArchivedPortfolios((current) => {
-        const map = new Map<string, Portfolio>();
+        setActivePortfolioId(id);
 
-        for (const portfolio of current) {
-          map.set(String(portfolio.id), portfolio);
+        if (typeof window !== "undefined") {
+          const previousId =
+            localStorage.getItem(
+              ACTIVE_PORTFOLIO_STORAGE_KEY,
+            );
+
+          localStorage.setItem(
+            ACTIVE_PORTFOLIO_STORAGE_KEY,
+            id,
+          );
+
+          /**
+           * فقط زمانی Event می‌فرستیم که مقدار واقعاً
+           * تغییر کرده باشد تا درخواست اضافه ایجاد نشود.
+           */
+          if (previousId !== id) {
+            notifyActivePortfolioChanged();
+          }
         }
-
-        for (const portfolio of apiArchived) {
-          map.set(String(portfolio.id), portfolio);
-        }
-
-        return Array.from(map.values());
-      });
+      }
     } catch (error) {
-      console.error("Get portfolios error:", error);
+      console.error(
+        "Get portfolios error:",
+        error,
+      );
 
       toast.error(
         error instanceof Error
@@ -158,42 +233,142 @@ function Portfolios() {
     }
   }
 
-  useEffect(() => {
-    const savedActivePortfolioId = localStorage.getItem(
-      ACTIVE_PORTFOLIO_STORAGE_KEY,
-    );
+  /**
+   * دریافت آرشیوها از بک‌اند
+   *
+   * این تابع عمداً از API استفاده می‌کند
+   * و اطلاعات را در state موقت نگه نمی‌دارد.
+   */
+  async function loadArchivedPortfolios() {
+    try {
+      setArchivedLoading(true);
 
-    if (savedActivePortfolioId) {
-      setActivePortfolioId(savedActivePortfolioId);
+      const data =
+        await getArchivedPortfolios();
+
+      const list = Array.isArray(data)
+        ? data
+        : [];
+
+      setArchivedPortfolios(list);
+    } catch (error) {
+      console.error(
+        "Get archived portfolios error:",
+        error,
+      );
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "دریافت پرتفولیوهای آرشیو شده ناموفق بود",
+      );
+    } finally {
+      setArchivedLoading(false);
     }
+  }
 
-    void loadPortfolios();
+  /**
+   * خیلی مهم:
+   * با هر بار ورود به صفحه / Refresh
+   * هر دو لیست از بک‌اند دریافت می‌شوند.
+   */
+  useEffect(() => {
+    void Promise.all([
+      loadPortfolios(),
+      loadArchivedPortfolios(),
+    ]);
   }, []);
 
   /**
    * فعال‌سازی پرتفولیو
    */
-  function activatePortfolio(portfolio: Portfolio) {
+  async function handleActivatePortfolio(
+    portfolio: Portfolio,
+  ) {
     const id = String(portfolio.id);
 
-    // اگر همین پرتفولیو از قبل فعال است
     if (activePortfolioId === id) {
-      toast.info(`پرتفولیو «${portfolio.name}» در حال حاضر فعال است`);
+      toast.info(
+        `پرتفولیو «${portfolio.name}» در حال حاضر فعال است`,
+      );
       return;
     }
 
-    setActivePortfolioId(id);
+    if (activatingId !== null) {
+      return;
+    }
 
-    localStorage.setItem(ACTIVE_PORTFOLIO_STORAGE_KEY, id);
+    try {
+      setActivatingId(id);
 
-    toast.success(`پرتفولیو «${portfolio.name}» فعال شد`);
+      /**
+       * ابتدا فعال‌سازی در بک‌اند
+       */
+      await activatePortfolioApi(
+        portfolio.id,
+      );
+
+      /**
+       * سپس ذخیره در state
+       */
+      setActivePortfolioId(id);
+
+      /**
+       * ذخیره ID پرتفولیوی فعال در localStorage
+       */
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          ACTIVE_PORTFOLIO_STORAGE_KEY,
+          id,
+        );
+
+        /**
+         * اطلاع‌رسانی فوری به صفحه معاملات
+         * و سایر صفحات
+         */
+        notifyActivePortfolioChanged();
+      }
+
+      /**
+       * بروزرسانی وضعیت کارت‌ها
+       */
+      setPortfolios((current) =>
+        current.map((item) => ({
+          ...item,
+          is_active:
+            String(item.id) === id,
+        })),
+      );
+
+      toast.success(
+        `پرتفولیو «${portfolio.name}» فعال شد`,
+      );
+    } catch (error) {
+      console.error(
+        "Activate portfolio error:",
+        error,
+      );
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "فعال‌سازی پرتفولیو ناموفق بود",
+      );
+    } finally {
+      setActivatingId(null);
+    }
   }
 
   /**
-   * بررسی فعال بودن پرتفولیو
+   * آیا پرتفولیو فعال است؟
    */
-  function isPortfolioActive(portfolio: Portfolio) {
-    return activePortfolioId === String(portfolio.id);
+  function isPortfolioActive(
+    portfolio: Portfolio,
+  ) {
+    return (
+      activePortfolioId ===
+      String(portfolio.id)
+    );
   }
 
   /**
@@ -210,21 +385,30 @@ function Portfolios() {
   /**
    * ساخت پرتفولیو
    */
-  async function submit(e: FormEvent<HTMLFormElement>) {
+  async function submit(
+    e: FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault();
 
     const trimmedName = name.trim();
     const trimmedBroker = broker.trim();
 
     if (!trimmedName || !trimmedBroker) {
-      toast.error("نام و بروکر الزامی است");
+      toast.error(
+        "نام و بروکر الزامی است",
+      );
       return;
     }
 
     const initialBalance = Number(balance);
 
-    if (!Number.isFinite(initialBalance) || initialBalance < 0) {
-      toast.error("موجودی اولیه را صحیح وارد کنید");
+    if (
+      !Number.isFinite(initialBalance) ||
+      initialBalance < 0
+    ) {
+      toast.error(
+        "موجودی اولیه را صحیح وارد کنید",
+      );
       return;
     }
 
@@ -239,14 +423,22 @@ function Portfolios() {
         leverage,
       });
 
-      toast.success(`پرتفولیو «${trimmedName}» ساخته شد`);
+      toast.success(
+        `پرتفولیو «${trimmedName}» ساخته شد`,
+      );
 
       resetForm();
       setOpen(false);
 
-      await loadPortfolios();
+      await Promise.all([
+        loadPortfolios(),
+        loadArchivedPortfolios(),
+      ]);
     } catch (error) {
-      console.error("Create portfolio error:", error);
+      console.error(
+        "Create portfolio error:",
+        error,
+      );
 
       toast.error(
         error instanceof Error
@@ -259,22 +451,32 @@ function Portfolios() {
   }
 
   /**
-   * باز کردن فرم ویرایش
+   * باز کردن ویرایش
    */
-  function openEditPortfolio(portfolio: Portfolio) {
+  function openEditPortfolio(
+    portfolio: Portfolio,
+  ) {
     setPortfolioToEdit(portfolio);
 
     setName(portfolio.name ?? "");
     setBroker(portfolio.broker ?? "");
-    setBalance(String(portfolio.balance ?? ""));
-    setCurrency(portfolio.currency ?? "USD");
-    setLeverage(portfolio.leverage ?? "1:100");
+    setBalance(
+      String(portfolio.balance ?? ""),
+    );
+    setCurrency(
+      portfolio.currency ?? "USD",
+    );
+    setLeverage(
+      portfolio.leverage ?? "1:100",
+    );
   }
 
   /**
    * ذخیره ویرایش
    */
-  async function submitEdit(e: FormEvent<HTMLFormElement>) {
+  async function submitEdit(
+    e: FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault();
 
     if (!portfolioToEdit) {
@@ -285,27 +487,37 @@ function Portfolios() {
     const trimmedBroker = broker.trim();
 
     if (!trimmedName || !trimmedBroker) {
-      toast.error("نام و بروکر الزامی است");
+      toast.error(
+        "نام و بروکر الزامی است",
+      );
       return;
     }
 
     const newBalance = Number(balance);
 
-    if (!Number.isFinite(newBalance) || newBalance < 0) {
-      toast.error("موجودی را صحیح وارد کنید");
+    if (
+      !Number.isFinite(newBalance) ||
+      newBalance < 0
+    ) {
+      toast.error(
+        "موجودی را صحیح وارد کنید",
+      );
       return;
     }
 
     try {
       setUpdating(true);
 
-      await updatePortfolio(portfolioToEdit.id, {
-        name: trimmedName,
-        broker: trimmedBroker,
-        balance: newBalance,
-        currency,
-        leverage,
-      });
+      await updatePortfolio(
+        portfolioToEdit.id,
+        {
+          name: trimmedName,
+          broker: trimmedBroker,
+          balance: newBalance,
+          currency,
+          leverage,
+        },
+      );
 
       toast.success(
         `پرتفولیو «${trimmedName}» با موفقیت ویرایش شد`,
@@ -314,9 +526,15 @@ function Portfolios() {
       setPortfolioToEdit(null);
       resetForm();
 
-      await loadPortfolios();
+      await Promise.all([
+        loadPortfolios(),
+        loadArchivedPortfolios(),
+      ]);
     } catch (error) {
-      console.error("Update portfolio error:", error);
+      console.error(
+        "Update portfolio error:",
+        error,
+      );
 
       toast.error(
         error instanceof Error
@@ -331,67 +549,72 @@ function Portfolios() {
   /**
    * باز کردن تأیید آرشیو
    */
-  function askArchivePortfolio(portfolio: Portfolio) {
+  function askArchivePortfolio(
+    portfolio: Portfolio,
+  ) {
     setPortfolioToArchive(portfolio);
   }
 
   /**
-   * آرشیو پرتفولیو
+   * آرشیو واقعی
    */
   async function confirmArchivePortfolio() {
     if (!portfolioToArchive) {
       return;
     }
 
-    const portfolio = portfolioToArchive;
+    const portfolio =
+      portfolioToArchive;
+
     const id = String(portfolio.id);
 
     try {
       setArchiving(true);
 
-      console.log("Archiving portfolio:", id);
+      await archivePortfolio(
+        portfolio.id,
+      );
 
-      await archivePortfolio(portfolio.id);
-
-      setArchivedIds((current) => {
-        const next = new Set(current);
-        next.add(id);
-        return next;
-      });
-
-      // ذخیره پرتفولیو در لیست آرشیوشده
-      setSavedArchivedPortfolios((current) => {
-        const exists = current.some(
-          (p) => String(p.id) === id,
-        );
-
-        if (exists) {
-          return current;
-        }
-
-        return [...current, portfolio];
-      });
-
-      // اگر پرتفولیو فعال بود، فعال بودنش را هم حذف کن
+      /**
+       * اگر پرتفولیوی آرشیوشده همان پرتفولیوی فعال بود،
+       * باید active portfolio نیز پاک شود.
+       */
       if (activePortfolioId === id) {
         setActivePortfolioId(null);
-        localStorage.removeItem(ACTIVE_PORTFOLIO_STORAGE_KEY);
+
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(
+            ACTIVE_PORTFOLIO_STORAGE_KEY,
+          );
+
+          /**
+           * اطلاع‌رسانی به صفحه معاملات
+           * که دیگر پرتفولیوی فعالی وجود ندارد.
+           */
+          notifyActivePortfolioChanged();
+        }
       }
 
-      // حذف از لیست فعال
-      setPortfolios((current) =>
-        current.filter((p) => String(p.id) !== id),
-      );
+      setPortfolioToArchive(null);
 
       toast.success(
         `پرتفولیو «${portfolio.name}» آرشیو شد`,
       );
 
-      setPortfolioToArchive(null);
-
-      await loadPortfolios();
+      /*
+       * مهم:
+       * بعد از آرشیو، هر دو لیست را مستقیم
+       * از بک‌اند دوباره می‌گیریم.
+       */
+      await Promise.all([
+        loadPortfolios(),
+        loadArchivedPortfolios(),
+      ]);
     } catch (error) {
-      console.error("Archive portfolio error:", error);
+      console.error(
+        "Archive portfolio error:",
+        error,
+      );
 
       toast.error(
         error instanceof Error
@@ -406,47 +629,76 @@ function Portfolios() {
   /**
    * باز کردن تأیید حذف
    */
-  function askDeletePortfolio(portfolio: Portfolio) {
+  function askDeletePortfolio(
+    portfolio: Portfolio,
+  ) {
     setPortfolioToDelete(portfolio);
   }
 
   /**
-   * حذف پرتفولیو
+   * حذف
    */
   async function confirmDeletePortfolio() {
     if (!portfolioToDelete) {
       return;
     }
 
-    const portfolio = portfolioToDelete;
+    const portfolio =
+      portfolioToDelete;
+
     const id = String(portfolio.id);
 
     try {
       setDeleting(true);
 
-      await deletePortfolio(portfolio.id);
+      await deletePortfolio(
+        portfolio.id,
+      );
 
       toast.success(
         `پرتفولیو «${portfolio.name}» حذف شد`,
       );
 
       setPortfolios((current) =>
-        current.filter((p) => String(p.id) !== id),
+        current.filter(
+          (item) =>
+            String(item.id) !== id,
+        ),
       );
 
-      setSavedArchivedPortfolios((current) =>
-        current.filter((p) => String(p.id) !== id),
+      setArchivedPortfolios(
+        (current) =>
+          current.filter(
+            (item) =>
+              String(item.id) !== id,
+          ),
       );
 
-      // اگر پرتفولیو فعال بود، فعال بودنش را حذف کن
+      /**
+       * اگر پرتفولیوی حذف‌شده فعال بود،
+       * active portfolio را نیز پاک می‌کنیم.
+       */
       if (activePortfolioId === id) {
         setActivePortfolioId(null);
-        localStorage.removeItem(ACTIVE_PORTFOLIO_STORAGE_KEY);
+
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(
+            ACTIVE_PORTFOLIO_STORAGE_KEY,
+          );
+
+          /**
+           * اطلاع‌رسانی به صفحه معاملات
+           */
+          notifyActivePortfolioChanged();
+        }
       }
 
       setPortfolioToDelete(null);
     } catch (error) {
-      console.error("Delete portfolio error:", error);
+      console.error(
+        "Delete portfolio error:",
+        error,
+      );
 
       toast.error(
         error instanceof Error
@@ -459,62 +711,6 @@ function Portfolios() {
   }
 
   /**
-   * تشخیص آرشیوشده بودن پرتفولیو
-   */
-  function isPortfolioArchived(portfolio: Portfolio) {
-    const id = String(portfolio.id);
-
-    if (archivedIds.has(id)) {
-      return true;
-    }
-
-    if (portfolio.is_archived === true) {
-      return true;
-    }
-
-    if (portfolio.archived === true) {
-      return true;
-    }
-
-    const status = String(portfolio.status ?? "")
-      .trim()
-      .toLowerCase();
-
-    return [
-      "archived",
-      "archive",
-      "آرشیو",
-      "آرشیو شده",
-      "آرشیوشده",
-    ].includes(status);
-  }
-
-  /**
-   * فقط پرتفولیوهای فعال
-   */
-  const activePortfolios = portfolios.filter(
-    (portfolio) => !isPortfolioArchived(portfolio),
-  );
-
-  /**
-   * فقط پرتفولیوهای آرشیوشده
-   */
-  const apiArchivedPortfolios = portfolios.filter(
-    (portfolio) => isPortfolioArchived(portfolio),
-  );
-
-  const archivedPortfolios = [
-    ...savedArchivedPortfolios,
-    ...apiArchivedPortfolios.filter(
-      (apiPortfolio) =>
-        !savedArchivedPortfolios.some(
-          (savedPortfolio) =>
-            String(savedPortfolio.id) === String(apiPortfolio.id),
-        ),
-    ),
-  ];
-
-  /**
    * کارت پرتفولیو
    */
   function PortfolioCard({
@@ -524,23 +720,28 @@ function Portfolios() {
     p: Portfolio;
     archived?: boolean;
   }) {
-    const currentBalance = Number(p.balance) || 0;
+    const currentBalance =
+      Number(p.balance) || 0;
 
     const initialBalance =
-      Number(p.initial ?? p.balance) || 0;
+      Number(
+        p.initial ?? p.balance,
+      ) || 0;
 
-    const pnl = currentBalance - initialBalance;
+    const pnl =
+      currentBalance - initialBalance;
 
     const pct =
       initialBalance > 0
         ? (pnl / initialBalance) * 100
         : 0;
 
-    const isActive = !archived && isPortfolioActive(p);
+    const isActive =
+      !archived &&
+      isPortfolioActive(p);
 
     return (
       <div
-        key={String(p.id)}
         className={`card-surface p-5 transition-all hover:border-primary/40 ${
           isActive
             ? "border-primary/50 ring-1 ring-primary/20"
@@ -571,7 +772,9 @@ function Portfolios() {
             size="icon"
             className="h-8 w-8 shrink-0"
             onClick={() =>
-              toast.info("منوی گزینه‌ها به‌زودی")
+              toast.info(
+                "منوی گزینه‌ها به‌زودی",
+              )
             }
           >
             <MoreVertical className="h-4 w-4" />
@@ -586,7 +789,9 @@ function Portfolios() {
             </div>
 
             <div className="mt-1 text-lg font-bold tabular">
-              {p.currency === "IRR" ? "" : "$"}
+              {p.currency === "IRR"
+                ? ""
+                : "$"}
               {currentBalance.toLocaleString()}
             </div>
           </div>
@@ -598,12 +803,18 @@ function Portfolios() {
 
             <div
               className={`mt-1 text-lg font-bold tabular ${
-                pnl >= 0 ? "gain" : "loss"
+                pnl >= 0
+                  ? "gain"
+                  : "loss"
               }`}
             >
               {pnl >= 0 ? "+" : "-"}
-              {p.currency === "IRR" ? "" : "$"}
-              {Math.abs(pnl).toLocaleString()}
+              {p.currency === "IRR"
+                ? ""
+                : "$"}
+              {Math.abs(
+                pnl,
+              ).toLocaleString()}
             </div>
           </div>
         </div>
@@ -652,12 +863,15 @@ function Portfolios() {
               ? "آرشیو شده"
               : isActive
                 ? "فعال"
-                : p.status || "غیرفعال"}
+                : p.status ||
+                  "غیرفعال"}
           </Badge>
 
           <div
             className={`text-sm font-medium tabular ${
-              pct >= 0 ? "gain" : "loss"
+              pct >= 0
+                ? "gain"
+                : "loss"
             }`}
           >
             {pct >= 0 ? "+" : ""}
@@ -672,24 +886,36 @@ function Portfolios() {
             <Button
               type="button"
               size="sm"
-              variant={isActive ? "default" : "outline"}
+              title="فعال‌سازی پرتفولیو"
+              variant={
+                isActive
+                  ? "default"
+                  : "outline"
+              }
               className={`min-w-0 flex-1 ${
                 isActive
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : ""
               }`}
-              onClick={() => activatePortfolio(p)}
+              disabled={
+                activatingId !== null
+              }
+              onClick={() =>
+                void handleActivatePortfolio(
+                  p,
+                )
+              }
             >
-              {isActive ? (
+              {activatingId ===
+              String(p.id) ? (
+                "در حال فعال‌سازی..."
+              ) : isActive ? (
                 <>
                   <Check className="ml-1 h-3 w-3" />
                   فعال
                 </>
               ) : (
-                <>
-                  <Link2 className="ml-1 h-3 w-3" />
-                  فعال‌سازی
-                </>
+                "فعال‌سازی"
               )}
             </Button>
 
@@ -699,7 +925,9 @@ function Portfolios() {
               size="sm"
               variant="outline"
               title="ویرایش پرتفولیو"
-              onClick={() => openEditPortfolio(p)}
+              onClick={() =>
+                openEditPortfolio(p)
+              }
             >
               <Edit className="h-3 w-3" />
             </Button>
@@ -711,7 +939,9 @@ function Portfolios() {
               variant="outline"
               title="آرشیو پرتفولیو"
               disabled={archiving}
-              onClick={() => askArchivePortfolio(p)}
+              onClick={() =>
+                askArchivePortfolio(p)
+              }
               className="border-yellow-500/40 text-yellow-600 transition-all hover:bg-yellow-500/10 hover:text-yellow-600 dark:text-yellow-400 dark:hover:text-yellow-400"
             >
               <Archive className="h-3 w-3" />
@@ -724,27 +954,34 @@ function Portfolios() {
               variant="outline"
               title="حذف پرتفولیو"
               disabled={deleting}
-              onClick={() => askDeletePortfolio(p)}
+              onClick={() =>
+                askDeletePortfolio(p)
+              }
               className="border-red-500/40 text-red-500 transition-all hover:bg-red-500/10 hover:text-red-500"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         ) : (
+          /*
+           * کارت آرشیوشده:
+           * فقط دکمه بازیابی
+           */
           <div className="mt-4">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="w-full"
+              title="بازیابی پرتفولیو"
+              className="w-full border-yellow-500/40 text-yellow-600 transition-all hover:bg-yellow-500/10 hover:text-yellow-600 dark:text-yellow-400 dark:hover:text-yellow-400"
               onClick={() =>
                 toast.info(
-                  "بازیابی پرتفولیو به‌زودی اضافه می‌شود",
+                  "برای بازیابی پرتفولیو، endpoint بازیابی باید از بک‌اند اضافه شود.",
                 )
               }
             >
               <Archive className="ml-1 h-3 w-3" />
-              پرتفولیو آرشیو شده
+              بازیابی
             </Button>
           </div>
         )}
@@ -752,29 +989,48 @@ function Portfolios() {
     );
   }
 
+  const activePortfolios =
+    portfolios.filter(
+      (portfolio) =>
+        !isPortfolioArchived(
+          portfolio,
+        ),
+    );
+
   return (
     <AppShell
       title="پرتفولیوها"
       subtitle="مدیریت حساب‌های معاملاتی و اتصال به بروکرها"
       actions={
         <div className="flex items-center gap-2">
-          {/* دکمه پرتفولیوهای آرشیوشده */}
+          {/* آرشیو شده‌ها */}
           <Button
             type="button"
-            onClick={() => setArchivedOpen(true)}
+            onClick={() => {
+              setArchivedOpen(true);
+
+              /*
+               * هر بار باز کردن هم دوباره
+               * از بک‌اند می‌گیریم.
+               */
+              void loadArchivedPortfolios();
+            }}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Archive className="ml-1 h-4 w-4" />
             پرتفولیوهای آرشیو شده
           </Button>
 
-          {/* دکمه پرتفولیو جدید */}
+          {/* پرتفولیو جدید */}
           <Dialog
             open={open}
             onOpenChange={(value) => {
               setOpen(value);
 
-              if (!value && !creating) {
+              if (
+                !value &&
+                !creating
+              ) {
                 resetForm();
               }
             }}
@@ -797,75 +1053,112 @@ function Portfolios() {
                   </DialogTitle>
 
                   <DialogDescription className="pt-2 text-right leading-7">
-                    یک حساب معاملاتی جدید اضافه کن.
-                    بعداً می‌توانی به MT4/MT5 متصل کنی.
+                    یک حساب معاملاتی جدید
+                    اضافه کن. بعداً می‌توانی
+                    به MT4/MT5 متصل کنی.
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
-                    <Label>نام پرتفولیو</Label>
+                    <Label>
+                      نام پرتفولیو
+                    </Label>
 
                     <Input
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) =>
+                        setName(
+                          e.target.value,
+                        )
+                      }
                       placeholder="پرتفوی اصلی"
                       className="bg-secondary/60"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>بروکر</Label>
+                    <Label>
+                      بروکر
+                    </Label>
 
                     <Input
                       value={broker}
-                      onChange={(e) => setBroker(e.target.value)}
+                      onChange={(e) =>
+                        setBroker(
+                          e.target.value,
+                        )
+                      }
                       placeholder="IC Markets"
                       className="bg-secondary/60"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>موجودی اولیه</Label>
+                    <Label>
+                      موجودی اولیه
+                    </Label>
 
                     <Input
                       type="number"
                       min="0"
                       step="any"
                       value={balance}
-                      onChange={(e) => setBalance(e.target.value)}
+                      onChange={(e) =>
+                        setBalance(
+                          e.target.value,
+                        )
+                      }
                       placeholder="10000"
                       className="bg-secondary/60 tabular"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>ارز</Label>
+                    <Label>
+                      ارز
+                    </Label>
 
                     <Select
                       value={currency}
-                      onValueChange={setCurrency}
+                      onValueChange={
+                        setCurrency
+                      }
                     >
                       <SelectTrigger className="bg-secondary/60">
                         <SelectValue />
                       </SelectTrigger>
 
                       <SelectContent>
-                        {["USD", "USDT", "EUR", "IRR"].map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
+                        {[
+                          "USD",
+                          "USDT",
+                          "EUR",
+                          "IRR",
+                        ].map(
+                          (c) => (
+                            <SelectItem
+                              key={c}
+                              value={c}
+                            >
+                              {c}
+                            </SelectItem>
+                          ),
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>لوریج</Label>
+                    <Label>
+                      لوریج
+                    </Label>
 
                     <Select
                       value={leverage}
-                      onValueChange={setLeverage}
+                      onValueChange={
+                        setLeverage
+                      }
                     >
                       <SelectTrigger className="bg-secondary/60">
                         <SelectValue />
@@ -878,11 +1171,16 @@ function Portfolios() {
                           "1:100",
                           "1:200",
                           "1:500",
-                        ].map((item) => (
-                          <SelectItem key={item} value={item}>
-                            {item}
-                          </SelectItem>
-                        ))}
+                        ].map(
+                          (item) => (
+                            <SelectItem
+                              key={item}
+                              value={item}
+                            >
+                              {item}
+                            </SelectItem>
+                          ),
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -934,7 +1232,8 @@ function Portfolios() {
             در حال دریافت پرتفولیوها...
           </div>
         </div>
-      ) : activePortfolios.length === 0 ? (
+      ) : activePortfolios.length ===
+        0 ? (
         <div className="card-surface flex min-h-60 flex-col items-center justify-center p-8 text-center">
           <div className="grid h-14 w-14 place-items-center rounded-full bg-primary/10 text-primary">
             <Wallet className="h-7 w-7" />
@@ -945,14 +1244,20 @@ function Portfolios() {
           </h2>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            اولین پرتفولیوی خودت را بساز.
+            اولین پرتفولیوی خودت را
+            بساز.
           </p>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {activePortfolios.map((p) => (
-            <PortfolioCard key={String(p.id)} p={p} />
-          ))}
+          {activePortfolios.map(
+            (p) => (
+              <PortfolioCard
+                key={String(p.id)}
+                p={p}
+              />
+            ),
+          )}
         </div>
       )}
 
@@ -973,42 +1278,57 @@ function Portfolios() {
                 <Archive className="h-5 w-5" />
               </span>
 
-              <span>پرتفولیوهای آرشیو شده</span>
+              <span>
+                پرتفولیوهای آرشیو شده
+              </span>
             </DialogTitle>
 
             <DialogDescription className="pt-2 text-right leading-7">
-              پرتفولیوهایی که آرشیو کرده‌ای در این قسمت
-              نگهداری می‌شوند و از لیست اصلی پرتفولیوها
-              جدا هستند.
+              پرتفولیوهایی که آرشیو
+              کرده‌ای در این قسمت
+              نگهداری می‌شوند و از لیست
+              اصلی پرتفولیوها جدا هستند.
             </DialogDescription>
           </DialogHeader>
 
           <div className="mt-5">
-            {archivedPortfolios.length === 0 ? (
+            {archivedLoading ? (
+              <div className="flex min-h-52 items-center justify-center rounded-xl border border-dashed border-border">
+                <div className="text-sm text-muted-foreground">
+                  در حال دریافت
+                  پرتفولیوهای آرشیو شده...
+                </div>
+              </div>
+            ) : archivedPortfolios.length ===
+              0 ? (
               <div className="flex min-h-52 flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
                 <div className="grid h-14 w-14 place-items-center rounded-full bg-yellow-500/10 text-yellow-500">
                   <Archive className="h-7 w-7" />
                 </div>
 
                 <h3 className="mt-4 text-base font-semibold">
-                  هنوز پرتفولیوی آرشیوشده‌ای وجود ندارد
+                  هنوز پرتفولیو
+                  آرشیوشده‌ای وجود ندارد
                 </h3>
 
                 <p className="mt-2 max-w-md text-sm leading-7 text-muted-foreground">
-                  وقتی یک پرتفولیو را آرشیو کنی، از لیست
-                  اصلی حذف نمی‌شود و از همین قسمت قابل
-                  مشاهده خواهد بود.
+                  وقتی یک پرتفولیو را
+                  آرشیو کنی، از لیست اصلی
+                  حذف می‌شود و در این قسمت
+                  باقی می‌ماند.
                 </p>
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {archivedPortfolios.map((p) => (
-                  <PortfolioCard
-                    key={String(p.id)}
-                    p={p}
-                    archived
-                  />
-                ))}
+                {archivedPortfolios.map(
+                  (p) => (
+                    <PortfolioCard
+                      key={String(p.id)}
+                      p={p}
+                      archived
+                    />
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -1017,7 +1337,9 @@ function Portfolios() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setArchivedOpen(false)}
+              onClick={() =>
+                setArchivedOpen(false)
+              }
               className="w-full sm:w-auto"
             >
               <X className="ml-1 h-4 w-4" />
@@ -1033,7 +1355,10 @@ function Portfolios() {
       <Dialog
         open={!!portfolioToEdit}
         onOpenChange={(value) => {
-          if (!value && !updating) {
+          if (
+            !value &&
+            !updating
+          ) {
             setPortfolioToEdit(null);
             resetForm();
           }
@@ -1050,72 +1375,109 @@ function Portfolios() {
               </DialogTitle>
 
               <DialogDescription className="pt-2 text-right leading-7">
-                اطلاعات پرتفولیو را تغییر دهید و سپس روی
-                «ذخیره تغییرات» بزنید.
+                اطلاعات پرتفولیو را تغییر
+                دهید و سپس روی «ذخیره
+                تغییرات» بزنید.
               </DialogDescription>
             </DialogHeader>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label>نام پرتفولیو</Label>
+                <Label>
+                  نام پرتفولیو
+                </Label>
 
                 <Input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) =>
+                    setName(
+                      e.target.value,
+                    )
+                  }
                   className="bg-secondary/60"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>بروکر</Label>
+                <Label>
+                  بروکر
+                </Label>
 
                 <Input
                   value={broker}
-                  onChange={(e) => setBroker(e.target.value)}
+                  onChange={(e) =>
+                    setBroker(
+                      e.target.value,
+                    )
+                  }
                   className="bg-secondary/60"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>موجودی</Label>
+                <Label>
+                  موجودی
+                </Label>
 
                 <Input
                   type="number"
                   min="0"
                   step="any"
                   value={balance}
-                  onChange={(e) => setBalance(e.target.value)}
+                  onChange={(e) =>
+                    setBalance(
+                      e.target.value,
+                    )
+                  }
                   className="bg-secondary/60 tabular"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>ارز</Label>
+                <Label>
+                  ارز
+                </Label>
 
                 <Select
                   value={currency}
-                  onValueChange={setCurrency}
+                  onValueChange={
+                    setCurrency
+                  }
                 >
                   <SelectTrigger className="bg-secondary/60">
                     <SelectValue />
                   </SelectTrigger>
 
                   <SelectContent>
-                    {["USD", "USDT", "EUR", "IRR"].map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
+                    {[
+                      "USD",
+                      "USDT",
+                      "EUR",
+                      "IRR",
+                    ].map(
+                      (c) => (
+                        <SelectItem
+                          key={c}
+                          value={c}
+                        >
+                          {c}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label>لوریج</Label>
+                <Label>
+                  لوریج
+                </Label>
 
                 <Select
                   value={leverage}
-                  onValueChange={setLeverage}
+                  onValueChange={
+                    setLeverage
+                  }
                 >
                   <SelectTrigger className="bg-secondary/60">
                     <SelectValue />
@@ -1128,11 +1490,16 @@ function Portfolios() {
                       "1:100",
                       "1:200",
                       "1:500",
-                    ].map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {item}
-                      </SelectItem>
-                    ))}
+                    ].map(
+                      (item) => (
+                        <SelectItem
+                          key={item}
+                          value={item}
+                        >
+                          {item}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1156,7 +1523,9 @@ function Portfolios() {
                 variant="outline"
                 disabled={updating}
                 onClick={() => {
-                  setPortfolioToEdit(null);
+                  setPortfolioToEdit(
+                    null,
+                  );
                   resetForm();
                 }}
                 className="w-full"
@@ -1184,8 +1553,13 @@ function Portfolios() {
       <Dialog
         open={!!portfolioToArchive}
         onOpenChange={(value) => {
-          if (!value && !archiving) {
-            setPortfolioToArchive(null);
+          if (
+            !value &&
+            !archiving
+          ) {
+            setPortfolioToArchive(
+              null,
+            );
           }
         }}
       >
@@ -1199,23 +1573,34 @@ function Portfolios() {
                 📦
               </span>
 
-              <span>آرشیو پرتفولیو</span>
+              <span>
+                آرشیو پرتفولیو
+              </span>
             </DialogTitle>
 
             <DialogDescription className="break-words pt-4 text-right text-sm leading-8">
-              آیا مطمئن هستید که می‌خواهید پرتفولیوی{" "}
+              آیا مطمئن هستید که
+              می‌خواهید پرتفولیوی{" "}
               <span className="font-bold text-foreground">
-                «{portfolioToArchive?.name}»
+                «
+                {
+                  portfolioToArchive?.name
+                }
+                »
               </span>{" "}
               را آرشیو کنید؟
             </DialogDescription>
 
             <div className="mt-2 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-4 py-3 text-right text-sm font-medium leading-7 text-yellow-600 dark:text-yellow-400">
-              <span className="font-bold">📦 توجه:</span>{" "}
-              پرتفولیو حذف نمی‌شود و اطلاعات آن در سیستم
-              باقی می‌ماند؛ فقط از لیست پرتفولیوهای فعال
-              خارج می‌شود و از بخش «پرتفولیوهای آرشیو شده»
-              قابل مشاهده خواهد بود.
+              <span className="font-bold">
+                📦 توجه:
+              </span>{" "}
+              پرتفولیو حذف نمی‌شود و
+              اطلاعات آن در سیستم باقی
+              می‌ماند؛ فقط از لیست
+              پرتفولیوهای فعال خارج می‌شود
+              و از بخش «پرتفولیوهای آرشیو
+              شده» قابل مشاهده خواهد بود.
             </div>
           </DialogHeader>
 
@@ -1231,7 +1616,9 @@ function Portfolios() {
             <Button
               type="button"
               disabled={archiving}
-              onClick={confirmArchivePortfolio}
+              onClick={
+                confirmArchivePortfolio
+              }
               className="
                 flex-1
                 bg-yellow-500
@@ -1240,14 +1627,20 @@ function Portfolios() {
                 hover:bg-yellow-500/90
               "
             >
-              {archiving ? "در حال آرشیو..." : "بله"}
+              {archiving
+                ? "در حال آرشیو..."
+                : "بله"}
             </Button>
 
             <Button
               type="button"
               variant="outline"
               disabled={archiving}
-              onClick={() => setPortfolioToArchive(null)}
+              onClick={() =>
+                setPortfolioToArchive(
+                  null,
+                )
+              }
               className="
                 flex-1
                 border-border
@@ -1271,8 +1664,13 @@ function Portfolios() {
       <Dialog
         open={!!portfolioToDelete}
         onOpenChange={(value) => {
-          if (!value && !deleting) {
-            setPortfolioToDelete(null);
+          if (
+            !value &&
+            !deleting
+          ) {
+            setPortfolioToDelete(
+              null,
+            );
           }
         }}
       >
@@ -1286,21 +1684,31 @@ function Portfolios() {
                 ⚠️
               </span>
 
-              <span>حذف پرتفولیو</span>
+              <span>
+                حذف پرتفولیو
+              </span>
             </DialogTitle>
 
             <DialogDescription className="break-words pt-4 text-right text-sm leading-8">
-              آیا مطمئن هستید که می‌خواهید پرتفولیوی{" "}
+              آیا مطمئن هستید که
+              می‌خواهید پرتفولیوی{" "}
               <span className="font-bold text-foreground">
-                «{portfolioToDelete?.name}»
+                «
+                {
+                  portfolioToDelete?.name
+                }
+                »
               </span>{" "}
               را حذف کنید؟
             </DialogDescription>
 
             <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-right text-sm font-medium leading-7 text-red-500 dark:text-red-400">
-              <span className="font-bold">⚠️ توجه:</span>{" "}
-              پس از حذف، اطلاعات این پرتفولیو قابل
-              بازگردانی نخواهد بود.
+              <span className="font-bold">
+                ⚠️ توجه:
+              </span>{" "}
+              پس از حذف، اطلاعات این
+              پرتفولیو قابل بازگردانی
+              نخواهد بود.
             </div>
           </DialogHeader>
 
@@ -1316,7 +1724,9 @@ function Portfolios() {
             <Button
               type="button"
               disabled={deleting}
-              onClick={confirmDeletePortfolio}
+              onClick={
+                confirmDeletePortfolio
+              }
               className="
                 flex-1
                 bg-red-500
@@ -1326,18 +1736,24 @@ function Portfolios() {
                 hover:bg-red-600
               "
             >
-              {deleting ? "در حال حذف..." : "بله"}
+              {deleting
+                ? "در حال حذف..."
+                : "بله"}
             </Button>
 
             <Button
               type="button"
               variant="outline"
               disabled={deleting}
-              onClick={() => setPortfolioToDelete(null)}
+              onClick={() =>
+                setPortfolioToDelete(
+                  null,
+                )
+              }
               className="
                 flex-1
                 border-border
-                transition-colors
+                transition-all
                 hover:border-red-500/40
                 hover:bg-red-500
                 hover:text-white
@@ -1353,3 +1769,4 @@ function Portfolios() {
     </AppShell>
   );
 }
+
