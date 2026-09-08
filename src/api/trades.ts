@@ -24,7 +24,7 @@ interface TradesResponse {
   transactions: Trade[];
 }
 
-function getToken() {
+function getToken(): string | null {
   return getAccessToken();
 }
 
@@ -58,23 +58,27 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function getTrades(
-  portfolioId: string | number,
-): Promise<Trade[]> {
+/**
+ * دریافت معاملات پرتفولیوی فعال کاربر.
+ *
+ * نکته:
+ * بک‌اند در نسخه جدید خودش پرتفولیوی فعال را تشخیص می‌دهد،
+ * بنابراین portfolio_id نباید به API ارسال شود.
+ */
+export async function getTrades(): Promise<Trade[]> {
   const token = getToken();
 
-  const response = await fetch(
-    `${API_BASE}/app/trades/?portfolio_id=${encodeURIComponent(
-      String(portfolioId),
-    )}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+  const response = await fetch(`${API_BASE}/app/trades/`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      ...(token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {}),
     },
-  );
+  });
 
   const data = await parseResponse<TradesResponse | Trade[]>(response);
 

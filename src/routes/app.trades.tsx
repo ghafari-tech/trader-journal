@@ -47,12 +47,15 @@ const ACTIVE_PORTFOLIO_STORAGE_KEY =
   "traderjournal-active-portfolio";
 
 /**
- * برای اطلاع‌رسانی تغییر پرتفولیوی فعال در همان تب.
+ * این event برای اطلاع‌رسانی تغییر پرتفولیوی فعال
+ * در همان تب استفاده می‌شود.
  */
 const ACTIVE_PORTFOLIO_CHANGED_EVENT =
   "traderjournal-active-portfolio-changed";
 
-function toNumber(value: string | number | null | undefined): number {
+function toNumber(
+  value: string | number | null | undefined,
+): number {
   if (value === null || value === undefined || value === "") {
     return 0;
   }
@@ -108,23 +111,40 @@ function getActivePortfolioId(): string | null {
 
 function TradesPage() {
   const [query, setQuery] = useState("");
-  const [side, setSide] = useState<"all" | "buy" | "sell">("all");
-  const [plan, setPlan] = useState<"all" | "yes" | "no">("all");
-  const [result, setResult] = useState<"all" | "win" | "loss">("all");
+
+  const [side, setSide] = useState<
+    "all" | "buy" | "sell"
+  >("all");
+
+  const [plan, setPlan] = useState<
+    "all" | "yes" | "no"
+  >("all");
+
+  const [result, setResult] = useState<
+    "all" | "win" | "loss"
+  >("all");
+
   const [filterOpen, setFilterOpen] = useState(false);
 
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [activePortfolioId, setActivePortfolioId] =
     useState<string | null>(null);
 
-  const loadTrades = async (portfolioId: string) => {
+  /**
+   * دریافت معاملات پرتفولیوی فعال.
+   *
+   * portfolioId عمداً به getTrades ارسال نمی‌شود،
+   * چون بک‌اند جدید خودش پرتفولیوی فعال را تشخیص می‌دهد.
+   */
+  const loadTrades = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const data = await getTrades(portfolioId);
+      const data = await getTrades();
 
       setTrades(data);
     } catch (err) {
@@ -143,7 +163,7 @@ function TradesPage() {
   };
 
   /**
-   * بارگذاری اولیه معاملات بر اساس پرتفولیوی فعال.
+   * بارگذاری اولیه معاملات.
    */
   useEffect(() => {
     const portfolioId = getActivePortfolioId();
@@ -153,19 +173,21 @@ function TradesPage() {
     if (!portfolioId) {
       setTrades([]);
       setLoading(false);
-      setError("هیچ پرتفولیوی فعالی انتخاب نشده است.");
+      setError(
+        "هیچ پرتفولیوی فعالی انتخاب نشده است.",
+      );
+
       return;
     }
 
-    void loadTrades(portfolioId);
+    void loadTrades();
   }, []);
 
   /**
-   * وقتی پرتفولیو در همان تب تغییر می‌کند،
-   * portfolios.tsx این event را ارسال می‌کند.
+   * وقتی پرتفولیوی فعال تغییر می‌کند،
+   * معاملات دوباره از بک‌اند دریافت می‌شوند.
    *
-   * storage هم نگه داشته شده تا اگر تغییر از تب دیگری
-   * انجام شد، صفحه معاملات نیز آپدیت شود.
+   * portfolios.tsx همین event را ارسال می‌کند.
    */
   useEffect(() => {
     const handlePortfolioChange = () => {
@@ -176,11 +198,14 @@ function TradesPage() {
       if (!portfolioId) {
         setTrades([]);
         setLoading(false);
-        setError("هیچ پرتفولیوی فعالی انتخاب نشده است.");
+        setError(
+          "هیچ پرتفولیوی فعالی انتخاب نشده است.",
+        );
+
         return;
       }
 
-      void loadTrades(portfolioId);
+      void loadTrades();
     };
 
     window.addEventListener(
@@ -208,10 +233,16 @@ function TradesPage() {
 
   const filtered = useMemo(() => {
     return trades.filter((trade) => {
-      const symbol = trade.symbol?.toLowerCase() ?? "";
-      const search = query.trim().toLowerCase();
+      const symbol =
+        trade.symbol?.toLowerCase() ?? "";
 
-      if (search && !symbol.includes(search)) {
+      const search =
+        query.trim().toLowerCase();
+
+      if (
+        search &&
+        !symbol.includes(search)
+      ) {
         return false;
       }
 
@@ -222,27 +253,47 @@ function TradesPage() {
         return false;
       }
 
-      if (plan === "yes" && !trade.followed_plan) {
+      if (
+        plan === "yes" &&
+        !trade.followed_plan
+      ) {
         return false;
       }
 
-      if (plan === "no" && trade.followed_plan) {
+      if (
+        plan === "no" &&
+        trade.followed_plan
+      ) {
         return false;
       }
 
-      const pnl = toNumber(trade.profit_loss);
+      const pnl = toNumber(
+        trade.profit_loss,
+      );
 
-      if (result === "win" && pnl < 0) {
+      if (
+        result === "win" &&
+        pnl < 0
+      ) {
         return false;
       }
 
-      if (result === "loss" && pnl >= 0) {
+      if (
+        result === "loss" &&
+        pnl >= 0
+      ) {
         return false;
       }
 
       return true;
     });
-  }, [trades, query, side, plan, result]);
+  }, [
+    trades,
+    query,
+    side,
+    plan,
+    result,
+  ]);
 
   return (
     <AppShell
@@ -253,7 +304,9 @@ function TradesPage() {
           <Button
             variant="outline"
             onClick={() =>
-              toast.success("خروجی CSV به‌زودی آماده می‌شود")
+              toast.success(
+                "خروجی CSV به‌زودی آماده می‌شود",
+              )
             }
           >
             <Download className="ml-1 h-4 w-4" />
@@ -273,7 +326,9 @@ function TradesPage() {
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) =>
+              setQuery(e.target.value)
+            }
             placeholder="جستجوی نماد..."
             className="max-w-xs bg-secondary/60"
           />
@@ -283,7 +338,10 @@ function TradesPage() {
             onOpenChange={setFilterOpen}
           >
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button
+                variant="outline"
+                size="sm"
+              >
                 <Filter className="ml-1 h-4 w-4" />
                 فیلترها
               </Button>
@@ -291,22 +349,30 @@ function TradesPage() {
 
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>فیلتر معاملات</DialogTitle>
+                <DialogTitle>
+                  فیلتر معاملات
+                </DialogTitle>
 
                 <DialogDescription>
-                  معاملات را بر اساس معیارهای زیر فیلتر کن.
+                  معاملات را بر اساس معیارهای زیر
+                  فیلتر کن.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="mt-4 space-y-4">
                 <div className="space-y-2">
-                  <Label>نوع معامله</Label>
+                  <Label>
+                    نوع معامله
+                  </Label>
 
                   <Select
                     value={side}
                     onValueChange={(value) =>
                       setSide(
-                        value as "all" | "buy" | "sell",
+                        value as
+                          | "all"
+                          | "buy"
+                          | "sell",
                       )
                     }
                   >
@@ -331,13 +397,18 @@ function TradesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>پایبندی به پلن</Label>
+                  <Label>
+                    پایبندی به پلن
+                  </Label>
 
                   <Select
                     value={plan}
                     onValueChange={(value) =>
                       setPlan(
-                        value as "all" | "yes" | "no",
+                        value as
+                          | "all"
+                          | "yes"
+                          | "no",
                       )
                     }
                   >
@@ -362,13 +433,18 @@ function TradesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>نتیجه</Label>
+                  <Label>
+                    نتیجه
+                  </Label>
 
                   <Select
                     value={result}
                     onValueChange={(value) =>
                       setResult(
-                        value as "all" | "win" | "loss",
+                        value as
+                          | "all"
+                          | "win"
+                          | "loss",
                       )
                     }
                   >
@@ -401,7 +477,10 @@ function TradesPage() {
                     setSide("all");
                     setPlan("all");
                     setResult("all");
-                    toast.success("فیلترها پاک شد");
+
+                    toast.success(
+                      "فیلترها پاک شد",
+                    );
                   }}
                 >
                   پاک کردن
@@ -417,15 +496,16 @@ function TradesPage() {
           </Dialog>
         </div>
 
-        {!activePortfolioId && !loading ? (
+        {!activePortfolioId &&
+        !loading ? (
           <div className="mt-5 rounded-lg border border-border bg-secondary/30 p-8 text-center">
             <p className="font-medium">
               هیچ پرتفولیوی فعالی انتخاب نشده است.
             </p>
 
             <p className="mt-2 text-sm text-muted-foreground">
-              ابتدا یک پرتفولیو را فعال کنید تا معاملات آن
-              نمایش داده شود.
+              ابتدا یک پرتفولیو را فعال کنید تا
+              معاملات آن نمایش داده شود.
             </p>
           </div>
         ) : loading ? (
@@ -450,7 +530,7 @@ function TradesPage() {
                 variant="outline"
                 className="mt-4"
                 onClick={() =>
-                  void loadTrades(activePortfolioId)
+                  void loadTrades()
                 }
               >
                 تلاش مجدد
@@ -511,7 +591,8 @@ function TradesPage() {
                   );
 
                   const isBuy =
-                    trade.transaction_type.toLowerCase() ===
+                    trade.transaction_type
+                      .toLowerCase() ===
                     "buy";
 
                   return (
@@ -537,7 +618,9 @@ function TradesPage() {
                               : "border-destructive/40 bg-destructive/10 text-destructive"
                           }
                         >
-                          {isBuy ? "خرید" : "فروش"}
+                          {isBuy
+                            ? "خرید"
+                            : "فروش"}
                         </Badge>
                       </td>
 
@@ -554,23 +637,32 @@ function TradesPage() {
                       </td>
 
                       <td className="py-3 tabular">
-                        {formatNumber(trade.volume)}
+                        {formatNumber(
+                          trade.volume,
+                        )}
                       </td>
 
                       <td className="py-3 tabular">
-                        {formatNumber(trade.r_r)}
+                        {formatNumber(
+                          trade.r_r,
+                        )}
                       </td>
 
                       <td
                         className={`py-3 tabular font-medium ${
-                          pnl >= 0 ? "gain" : "loss"
+                          pnl >= 0
+                            ? "gain"
+                            : "loss"
                         }`}
                       >
                         {pnl >= 0 ? "+" : ""}
-                        {pnl.toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {pnl.toLocaleString(
+                          "en-US",
+                          {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          },
+                        )}
                         $
                       </td>
 

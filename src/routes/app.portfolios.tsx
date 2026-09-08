@@ -208,10 +208,6 @@ function Portfolios() {
             id,
           );
 
-          /**
-           * فقط زمانی Event می‌فرستیم که مقدار واقعاً
-           * تغییر کرده باشد تا درخواست اضافه ایجاد نشود.
-           */
           if (previousId !== id) {
             notifyActivePortfolioChanged();
           }
@@ -235,9 +231,6 @@ function Portfolios() {
 
   /**
    * دریافت آرشیوها از بک‌اند
-   *
-   * این تابع عمداً از API استفاده می‌کند
-   * و اطلاعات را در state موقت نگه نمی‌دارد.
    */
   async function loadArchivedPortfolios() {
     try {
@@ -268,9 +261,7 @@ function Portfolios() {
   }
 
   /**
-   * خیلی مهم:
-   * با هر بار ورود به صفحه / Refresh
-   * هر دو لیست از بک‌اند دریافت می‌شوند.
+   * بارگذاری اولیه
    */
   useEffect(() => {
     void Promise.all([
@@ -301,37 +292,21 @@ function Portfolios() {
     try {
       setActivatingId(id);
 
-      /**
-       * ابتدا فعال‌سازی در بک‌اند
-       */
       await activatePortfolioApi(
         portfolio.id,
       );
 
-      /**
-       * سپس ذخیره در state
-       */
       setActivePortfolioId(id);
 
-      /**
-       * ذخیره ID پرتفولیوی فعال در localStorage
-       */
       if (typeof window !== "undefined") {
         localStorage.setItem(
           ACTIVE_PORTFOLIO_STORAGE_KEY,
           id,
         );
 
-        /**
-         * اطلاع‌رسانی فوری به صفحه معاملات
-         * و سایر صفحات
-         */
         notifyActivePortfolioChanged();
       }
 
-      /**
-       * بروزرسانی وضعیت کارت‌ها
-       */
       setPortfolios((current) =>
         current.map((item) => ({
           ...item,
@@ -575,10 +550,6 @@ function Portfolios() {
         portfolio.id,
       );
 
-      /**
-       * اگر پرتفولیوی آرشیوشده همان پرتفولیوی فعال بود،
-       * باید active portfolio نیز پاک شود.
-       */
       if (activePortfolioId === id) {
         setActivePortfolioId(null);
 
@@ -587,10 +558,6 @@ function Portfolios() {
             ACTIVE_PORTFOLIO_STORAGE_KEY,
           );
 
-          /**
-           * اطلاع‌رسانی به صفحه معاملات
-           * که دیگر پرتفولیوی فعالی وجود ندارد.
-           */
           notifyActivePortfolioChanged();
         }
       }
@@ -601,11 +568,6 @@ function Portfolios() {
         `پرتفولیو «${portfolio.name}» آرشیو شد`,
       );
 
-      /*
-       * مهم:
-       * بعد از آرشیو، هر دو لیست را مستقیم
-       * از بک‌اند دوباره می‌گیریم.
-       */
       await Promise.all([
         loadPortfolios(),
         loadArchivedPortfolios(),
@@ -674,10 +636,6 @@ function Portfolios() {
           ),
       );
 
-      /**
-       * اگر پرتفولیوی حذف‌شده فعال بود،
-       * active portfolio را نیز پاک می‌کنیم.
-       */
       if (activePortfolioId === id) {
         setActivePortfolioId(null);
 
@@ -686,9 +644,6 @@ function Portfolios() {
             ACTIVE_PORTFOLIO_STORAGE_KEY,
           );
 
-          /**
-           * اطلاع‌رسانی به صفحه معاملات
-           */
           notifyActivePortfolioChanged();
         }
       }
@@ -742,21 +697,33 @@ function Portfolios() {
 
     return (
       <div
-        className={`card-surface p-5 transition-all hover:border-primary/40 ${
+        className={`card-surface p-5 transition-all duration-300 ${
           isActive
-            ? "border-primary/50 ring-1 ring-primary/20"
-            : ""
+            ? "border-2 border-primary/70 bg-primary/[0.055] shadow-[0_0_0_3px_hsl(var(--primary)/0.08),0_8px_30px_hsl(var(--primary)/0.10)] ring-1 ring-primary/30"
+            : "border border-transparent hover:border-primary/40"
         }`}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            <div
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg transition-all duration-300 ${
+                isActive
+                  ? "bg-primary/15 text-primary shadow-[0_0_0_4px_hsl(var(--primary)/0.06)]"
+                  : "bg-primary/10 text-primary"
+              }`}
+            >
               <Wallet className="h-5 w-5" />
             </div>
 
             <div className="min-w-0">
-              <div className="truncate font-semibold">
+              <div
+                className={`truncate font-semibold ${
+                  isActive
+                    ? "text-primary"
+                    : ""
+                }`}
+              >
                 {p.name}
               </div>
 
@@ -783,7 +750,13 @@ function Portfolios() {
 
         {/* Balance / PNL */}
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-lg bg-secondary/40 p-3">
+          <div
+            className={`rounded-lg p-3 ${
+              isActive
+                ? "bg-primary/[0.07]"
+                : "bg-secondary/40"
+            }`}
+          >
             <div className="text-[11px] text-muted-foreground">
               موجودی فعلی
             </div>
@@ -796,7 +769,13 @@ function Portfolios() {
             </div>
           </div>
 
-          <div className="rounded-lg bg-secondary/40 p-3">
+          <div
+            className={`rounded-lg p-3 ${
+              isActive
+                ? "bg-primary/[0.07]"
+                : "bg-secondary/40"
+            }`}
+          >
             <div className="text-[11px] text-muted-foreground">
               سود / زیان
             </div>
@@ -848,14 +827,20 @@ function Portfolios() {
         </div>
 
         {/* Status */}
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
+        <div
+          className={`mt-5 flex items-center justify-between gap-3 border-t pt-4 ${
+            isActive
+              ? "border-primary/20"
+              : "border-border"
+          }`}
+        >
           <Badge
             variant="outline"
             className={
               archived
                 ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
                 : isActive
-                  ? "border-primary/40 bg-primary/10 text-primary"
+                  ? "border-primary/60 bg-primary/15 font-semibold text-primary shadow-sm"
                   : ""
             }
           >
@@ -892,9 +877,9 @@ function Portfolios() {
                   ? "default"
                   : "outline"
               }
-              className={`min-w-0 flex-1 ${
+              className={`min-w-0 flex-1 transition-all duration-300 ${
                 isActive
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  ? "bg-primary font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90"
                   : ""
               }`}
               disabled={
@@ -963,10 +948,6 @@ function Portfolios() {
             </Button>
           </div>
         ) : (
-          /*
-           * کارت آرشیوشده:
-           * فقط دکمه بازیابی
-           */
           <div className="mt-4">
             <Button
               type="button"
@@ -1008,11 +989,6 @@ function Portfolios() {
             type="button"
             onClick={() => {
               setArchivedOpen(true);
-
-              /*
-               * هر بار باز کردن هم دوباره
-               * از بک‌اند می‌گیریم.
-               */
               void loadArchivedPortfolios();
             }}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -1769,4 +1745,3 @@ function Portfolios() {
     </AppShell>
   );
 }
-
