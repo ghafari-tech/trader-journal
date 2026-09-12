@@ -28,7 +28,10 @@ import {
 } from "react";
 
 import { apiFetch } from "@/api/client";
-import { getNotifications, type Notification } from "@/api/notification";
+import {
+  getNotifications,
+  type Notification,
+} from "@/api/notification";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -346,14 +349,24 @@ function UserBlock({
       setLoading(true);
       setError(false);
 
+      /*
+       * مسیر صحیح طبق Swagger:
+       * GET /app/settings/user-info/
+       *
+       * مسیر قبلی /app/settings/user/ اشتباه بود.
+       */
       const userResponse =
         await apiFetch<UserApiResponse>(
-          "/app/settings/user/",
+          "/app/settings/user-info/",
           {
             method: "GET",
           },
         );
 
+      /*
+       * مسیر پلن طبق URLهای Django:
+       * GET /app/settings/plan/
+       */
       const planResponse =
         await apiFetch<PlanApiResponse>(
           "/app/settings/plan/",
@@ -363,6 +376,7 @@ function UserBlock({
         );
 
       setUser(userResponse);
+
       setPlan(
         planResponse?.plan ?? null,
       );

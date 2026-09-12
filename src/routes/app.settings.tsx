@@ -1,3 +1,4 @@
+
 import { createFileRoute } from "@tanstack/react-router";
 import {
   CreditCard,
@@ -13,7 +14,6 @@ import {
   KeyRound,
   MonitorCog,
   Info,
-  ExternalLink,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -32,12 +32,18 @@ import { Switch } from "@/components/ui/switch";
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
 } from "@/components/ui/avatar";
 
 import {
   getMetaTraderStatus,
   type MetaTraderStatus,
 } from "@/api/metatrader";
+
+import {
+  getUserProfile,
+  type UserProfile,
+} from "@/api/user";
 
 export const Route = createFileRoute("/app/settings")({
   head: () => ({
@@ -142,9 +148,7 @@ function MetaTraderSettings() {
   return (
     <div className="space-y-6">
 
-      {/* ===================================================
-          Header
-      =================================================== */}
+      {/* Header */}
 
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
@@ -185,9 +189,7 @@ function MetaTraderSettings() {
         </Button>
       </div>
 
-      {/* ===================================================
-          Loading
-      =================================================== */}
+      {/* Loading */}
 
       {loading && (
         <div className="card-surface p-6">
@@ -203,9 +205,7 @@ function MetaTraderSettings() {
         </div>
       )}
 
-      {/* ===================================================
-          Error
-      =================================================== */}
+      {/* Error */}
 
       {!loading && error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
@@ -237,14 +237,11 @@ function MetaTraderSettings() {
         </div>
       )}
 
-      {/* ===================================================
-          Status
-      =================================================== */}
+      {/* Status */}
 
       {!loading && !error && status && (
         <>
           <div className="card-surface p-6">
-
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm text-muted-foreground">
@@ -294,8 +291,6 @@ function MetaTraderSettings() {
               </div>
             </div>
 
-            {/* Connected account information */}
-
             {isConnected && (
               <div className="mt-6 grid gap-4 border-t border-border pt-6 sm:grid-cols-2 lg:grid-cols-3">
 
@@ -340,15 +335,11 @@ function MetaTraderSettings() {
 
               </div>
             )}
-
           </div>
 
-          {/* =================================================
-              API Key
-          ================================================= */}
+          {/* API Key */}
 
           <div className="card-surface p-6">
-
             <div className="flex items-start gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                 <KeyRound className="h-5 w-5" />
@@ -410,15 +401,11 @@ function MetaTraderSettings() {
                 </p>
               </div>
             </div>
-
           </div>
 
-          {/* =================================================
-              Installation Guide
-          ================================================= */}
+          {/* Installation Guide */}
 
           <div className="card-surface p-6">
-
             <div className="flex items-start gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                 <Link2 className="h-5 w-5" />
@@ -616,12 +603,9 @@ function MetaTraderSettings() {
               </div>
 
             </div>
-
           </div>
 
-          {/* =================================================
-              Connection Explanation
-          ================================================= */}
+          {/* Connection Explanation */}
 
           {!isConnected && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
@@ -664,7 +648,6 @@ function MetaTraderSettings() {
           )}
         </>
       )}
-
     </div>
   );
 }
@@ -674,6 +657,52 @@ function MetaTraderSettings() {
 ========================================================= */
 
 function SettingsPage() {
+  const [user, setUser] =
+    useState<UserProfile | null>(null);
+
+  const [userLoading, setUserLoading] =
+    useState(true);
+
+  const [userError, setUserError] =
+    useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadUserInfo() {
+      try {
+        setUserLoading(true);
+        setUserError(null);
+
+        const response =
+          await getUserProfile();
+
+        setUser(response);
+      } catch (err) {
+        console.error(
+          "Get user info error:",
+          err,
+        );
+
+        setUserError(
+          err instanceof Error
+            ? err.message
+            : "خطا در دریافت کاربر",
+        );
+      } finally {
+        setUserLoading(false);
+      }
+    }
+
+    void loadUserInfo();
+  }, []);
+
+  const fullName =
+    `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() ||
+    "کاربر";
+
+  const initials =
+    `${user?.first_name?.charAt(0) ?? ""}${user?.last_name?.charAt(0) ?? ""}` ||
+    "ک";
+
   return (
     <AppShell
       title="تنظیمات"
@@ -713,78 +742,144 @@ function SettingsPage() {
         >
           <div className="card-surface p-6">
 
-            <div className="flex items-center gap-4">
+            {userLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="text-center">
+                  <RefreshCw className="mx-auto h-7 w-7 animate-spin text-primary" />
 
-              <Avatar className="h-16 w-16">
-                <AvatarFallback className="bg-primary/20 text-lg font-bold text-primary">
-                  ع.ر
-                </AvatarFallback>
-              </Avatar>
-
-              <div>
-                <div className="font-semibold">
-                  علی رضایی
-                </div>
-
-                <div className="text-sm text-muted-foreground">
-                  ali@example.com
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    در حال دریافت اطلاعات کاربر...
+                  </p>
                 </div>
               </div>
+            ) : userError ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
+                <div className="flex items-start gap-3">
+                  <CircleX className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
 
-              <Button
-                variant="outline"
-                className="mr-auto"
-              >
-                تغییر عکس
-              </Button>
+                  <div>
+                    <div className="font-semibold text-destructive">
+                      خطا در دریافت اطلاعات کاربر
+                    </div>
 
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-
-              <div className="space-y-2">
-                <Label>نام</Label>
-
-                <Input
-                  defaultValue="علی"
-                  className="bg-secondary/60"
-                />
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {userError}
+                    </p>
+                  </div>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-4">
 
-              <div className="space-y-2">
-                <Label>نام خانوادگی</Label>
+                  <Avatar className="h-16 w-16">
+                    {user?.image_profile && (
+                      <AvatarImage
+                        src={user.image_profile}
+                        alt={fullName}
+                      />
+                    )}
 
-                <Input
-                  defaultValue="رضایی"
-                  className="bg-secondary/60"
-                />
-              </div>
+                    <AvatarFallback className="bg-primary/20 text-lg font-bold text-primary">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
 
-              <div className="space-y-2">
-                <Label>ایمیل</Label>
+                  <div>
+                    <div className="font-semibold">
+                      {fullName}
+                    </div>
 
-                <Input
-                  defaultValue="ali@example.com"
-                  className="bg-secondary/60"
-                />
-              </div>
+                    <div
+                      dir="ltr"
+                      className="text-sm text-muted-foreground"
+                    >
+                      {user?.email || "—"}
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label>موبایل</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mr-auto"
+                    disabled
+                  >
+                    تغییر عکس
+                  </Button>
 
-                <Input
-                  defaultValue="09123456789"
-                  className="bg-secondary/60 tabular"
-                />
-              </div>
+                </div>
 
-            </div>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
 
-            <div className="mt-6">
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                ذخیره تغییرات
-              </Button>
-            </div>
+                  <div className="space-y-2">
+                    <Label>
+                      نام
+                    </Label>
+
+                    <Input
+                      value={user?.first_name ?? ""}
+                      readOnly
+                      className="bg-secondary/60"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>
+                      نام خانوادگی
+                    </Label>
+
+                    <Input
+                      value={user?.last_name ?? ""}
+                      readOnly
+                      className="bg-secondary/60"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>
+                      ایمیل
+                    </Label>
+
+                    <Input
+                      value={user?.email ?? ""}
+                      readOnly
+                      dir="ltr"
+                      className="bg-secondary/60"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>
+                      موبایل
+                    </Label>
+
+                    <Input
+                      value={user?.phone ?? ""}
+                      readOnly
+                      dir="ltr"
+                      placeholder="ثبت نشده"
+                      className="bg-secondary/60 tabular"
+                    />
+                  </div>
+
+                </div>
+
+                <div className="mt-6">
+                  <Button
+                    type="button"
+                    disabled
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    ذخیره تغییرات
+                  </Button>
+
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    ویرایش اطلاعات تا زمان ارائه API ویرایش کاربر
+                    غیرفعال است.
+                  </p>
+                </div>
+              </>
+            )}
 
           </div>
         </TabsContent>

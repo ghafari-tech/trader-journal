@@ -13,11 +13,11 @@ export type UserProfile = {
 /**
  * دریافت اطلاعات کاربر فعلی از API
  *
- * GET /app/settings/user/
+ * GET /app/settings/user-info/
  */
 export async function getUserProfile(): Promise<UserProfile> {
   const user = await apiFetch<UserProfile>(
-    "/app/settings/user/",
+    "/app/settings/user-info/",
     {
       method: "GET",
     },
@@ -26,7 +26,7 @@ export async function getUserProfile(): Promise<UserProfile> {
     },
   );
 
-  // برای استفاده سریع در بخش‌های دیگر برنامه
+  // ذخیره نام کاربر برای استفاده در بخش‌های دیگر برنامه
   setCurrentUser({
     first_name: user.first_name ?? "",
     last_name: user.last_name ?? "",
