@@ -1,4 +1,3 @@
-
 import { createFileRoute } from "@tanstack/react-router";
 
 import {
@@ -8,7 +7,6 @@ import {
   Archive,
   Edit,
   Trash2,
-  X,
   Check,
 } from "lucide-react";
 
@@ -1308,20 +1306,6 @@ function Portfolios() {
               </div>
             )}
           </div>
-
-          <DialogFooter className="mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                setArchivedOpen(false)
-              }
-              className="w-full sm:w-auto"
-            >
-              <X className="ml-1 h-4 w-4" />
-              بستن
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -1,24 +1,53 @@
+
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronRight, ChevronLeft, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ChevronRight,
+  ChevronLeft,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
-import { getCalendar, type CalendarDay, type CalendarResponse } from "@/api/calendar";
-import { getAccessToken } from "@/lib/auth-storage";
+
+import {
+  getCalendar,
+  type CalendarDay,
+  type CalendarResponse,
+} from "@/api/calendar";
+
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/app/calendar")({
-  head: () => ({ meta: [{ title: "تقویم معاملاتی" }] }),
+export const Route = createFileRoute(
+  "/app/calendar",
+)({
+  head: () => ({
+    meta: [{ title: "تقویم معاملاتی" }],
+  }),
   component: CalendarPage,
 });
 
-const ACTIVE_PORTFOLIO_STORAGE_KEY = "traderjournal-active-portfolio";
+const ACTIVE_PORTFOLIO_STORAGE_KEY =
+  "traderjournal-active-portfolio";
 
 const ACTIVE_PORTFOLIO_CHANGED_EVENT =
   "traderjournal-active-portfolio-changed";
 
-const weekdays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
+const weekdays = [
+  "ش",
+  "ی",
+  "د",
+  "س",
+  "چ",
+  "پ",
+  "ج",
+];
 
 const jalaliMonthNames = [
   "فروردین",
@@ -40,86 +69,103 @@ function getActivePortfolioId(): string | null {
     return null;
   }
 
-  return localStorage.getItem(ACTIVE_PORTFOLIO_STORAGE_KEY);
+  const value = localStorage.getItem(
+    ACTIVE_PORTFOLIO_STORAGE_KEY,
+  );
+
+  return value && value.trim()
+    ? value
+    : null;
 }
 
 function toNumber(value: unknown): number {
   const number = Number(value);
 
-  return Number.isFinite(number) ? number : 0;
+  return Number.isFinite(number)
+    ? number
+    : 0;
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+function formatInteger(
+  value: number,
+): string {
+  return value.toLocaleString("en-US", {
     maximumFractionDigits: 0,
-  }).format(value);
+  });
 }
 
-function formatMoney(value: number): string {
+function formatMoney(
+  value: number,
+): string {
   const amount = toNumber(value);
 
-  return `${amount >= 0 ? "+" : "-"}$${formatNumber(Math.abs(amount))}`;
+  return `${amount >= 0 ? "+" : "-"}$${formatInteger(
+    Math.abs(amount),
+  )}`;
+}
+
+function toPersianDigits(
+  value: string | number,
+): string {
+  return String(value).replace(
+    /\d/g,
+    (digit) =>
+      "۰۱۲۳۴۵۶۷۸۹"[
+        Number(digit)
+      ] ?? digit,
+  );
+}
+
+function parseGregorianDate(
+  dateString: string,
+): {
+  year: number;
+  month: number;
+  day: number;
+} | null {
+  const match =
+    dateString.match(
+      /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/,
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null;
+  }
+
+  return {
+    year,
+    month,
+    day,
+  };
 }
 
 /**
- * تبدیل تاریخ جلالی به میلادی
- * برای به‌دست آوردن روز هفته در تقویم.
+ * تبدیل تاریخ میلادی به شمسی
  */
-function jalaliToGregorian(
-  jy: number,
-  jm: number,
-  jd: number,
-): {
-  gy: number;
-  gm: number;
-  gd: number;
-} {
-  let jy2 = jy - 979;
-
-  let days =
-    365 * jy2 +
-    Math.floor(jy2 / 33) * 8 +
-    Math.floor(((jy2 % 33) + 3) / 4);
-
-  for (let i = 0; i < jm - 1; i += 1) {
-    days += i < 6 ? 31 : 30;
-  }
-
-  days += jd - 1;
-
-  let gy = 1600 + 400 * Math.floor(days / 146097);
-
-  days %= 146097;
-
-  if (days > 36524) {
-    gy += 100 * Math.floor(--days / 36524);
-
-    days %= 36524;
-
-    if (days >= 365) {
-      days += 1;
-    }
-  }
-
-  gy += 4 * Math.floor(days / 1461);
-
-  days %= 1461;
-
-  if (days > 365) {
-    gy += Math.floor((days - 1) / 365);
-
-    days = (days - 1) % 365;
-  }
-
-  const gd = days + 1;
-
-  const isLeapYear =
-    (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
-
-  const monthDays = [
-    0,
+function gregorianToJalali(
+  gy: number,
+  gm: number,
+  gd: number,
+): [number, number, number] {
+  const gDaysInMonth = [
     31,
-    isLeapYear ? 29 : 28,
+    28,
     31,
     30,
     31,
@@ -132,168 +178,457 @@ function jalaliToGregorian(
     31,
   ];
 
-  let gm = 1;
-  let remainingDays = gd;
+  const jDaysInMonth = [
+    31,
+    31,
+    31,
+    31,
+    31,
+    31,
+    30,
+    30,
+    30,
+    30,
+    30,
+    29,
+  ];
 
-  while (remainingDays > monthDays[gm]) {
-    remainingDays -= monthDays[gm];
-    gm += 1;
+  const gy2 = gy - 1600;
+  const gm2 = gm - 1;
+  const gd2 = gd - 1;
+
+  let gDayNo =
+    365 * gy2 +
+    Math.floor((gy2 + 3) / 4) -
+    Math.floor((gy2 + 99) / 100) +
+    Math.floor((gy2 + 399) / 400);
+
+  for (let i = 0; i < gm2; i += 1) {
+    gDayNo += gDaysInMonth[i];
   }
 
-  return {
-    gy,
-    gm,
-    gd: remainingDays,
-  };
+  if (
+    gm2 > 1 &&
+    (gy % 4 === 0 &&
+      gy % 100 !== 0
+      ? true
+      : gy % 400 === 0)
+  ) {
+    gDayNo += 1;
+  }
+
+  gDayNo += gd2;
+
+  let jDayNo = gDayNo - 79;
+
+  const jNp = Math.floor(
+    jDayNo / 12053,
+  );
+
+  let jy = 979 + 33 * jNp;
+
+  jDayNo %= 12053;
+
+  jy +=
+    4 *
+    Math.floor(
+      jDayNo / 1461,
+    );
+
+  jDayNo %= 1461;
+
+  if (jDayNo >= 366) {
+    jy += Math.floor(
+      (jDayNo - 1) / 365,
+    );
+
+    jDayNo =
+      (jDayNo - 1) % 365;
+  }
+
+  let jm = 0;
+
+  while (
+    jm < 11 &&
+    jDayNo >= jDaysInMonth[jm]
+  ) {
+    jDayNo -=
+      jDaysInMonth[jm];
+
+    jm += 1;
+  }
+
+  const jd = jDayNo + 1;
+
+  return [
+    jy,
+    jm + 1,
+    jd,
+  ];
 }
 
 /**
- * چون getUTCDay:
- * یکشنبه = 0
- * دوشنبه = 1
+ * تبدیل تاریخ شمسی به میلادی
+ */
+function jalaliToGregorian(
+  jy: number,
+  jm: number,
+  jd: number,
+): [number, number, number] {
+  const gDaysInMonth = [
+    31,
+    28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+
+  const jDaysInMonth = [
+    31,
+    31,
+    31,
+    31,
+    31,
+    31,
+    30,
+    30,
+    30,
+    30,
+    30,
+    29,
+  ];
+
+  const jy2 = jy - 979;
+
+  let jDayNo =
+    365 * jy2 +
+    Math.floor(jy2 / 33) * 8 +
+    Math.floor(
+      ((jy2 % 33) + 3) / 4,
+    );
+
+  for (
+    let i = 0;
+    i < jm - 1;
+    i += 1
+  ) {
+    jDayNo +=
+      jDaysInMonth[i];
+  }
+
+  jDayNo += jd - 1;
+
+  let gDayNo = jDayNo + 79;
+
+  let gy =
+    1600 +
+    400 *
+      Math.floor(
+        gDayNo / 146097,
+      );
+
+  gDayNo %= 146097;
+
+  let leap = true;
+
+  if (gDayNo >= 36525) {
+    gDayNo -= 1;
+
+    gy +=
+      100 *
+      Math.floor(
+        gDayNo / 36524,
+      );
+
+    gDayNo %= 36524;
+
+    if (gDayNo >= 365) {
+      gDayNo += 1;
+    } else {
+      leap = false;
+    }
+  }
+
+  gy +=
+    4 *
+    Math.floor(
+      gDayNo / 1461,
+    );
+
+  gDayNo %= 1461;
+
+  if (gDayNo >= 366) {
+    leap = false;
+
+    gDayNo -= 1;
+
+    gy += Math.floor(
+      gDayNo / 365,
+    );
+
+    gDayNo %= 365;
+  }
+
+  let gm = 0;
+
+  while (
+    gDayNo >=
+    gDaysInMonth[gm] +
+      (gm === 1 && leap ? 1 : 0)
+  ) {
+    gDayNo -=
+      gDaysInMonth[gm] +
+      (gm === 1 && leap ? 1 : 0);
+
+    gm += 1;
+  }
+
+  const gd = gDayNo + 1;
+
+  return [
+    gy,
+    gm + 1,
+    gd,
+  ];
+}
+
+/**
+ * JavaScript:
+ * Sunday = 0
+ * Monday = 1
  * ...
- * شنبه = 6
+ * Saturday = 6
  *
- * اما تقویم ما از شنبه شروع می‌شود.
+ * تقویم UI از شنبه شروع می‌شود:
+ * Saturday = 0
+ * Sunday = 1
+ * ...
  */
 function getSaturdayFirstWeekday(
   year: number,
   month: number,
   day: number,
 ): number {
-  const gregorian = jalaliToGregorian(year, month, day);
-
   const date = new Date(
-    Date.UTC(gregorian.gy, gregorian.gm - 1, gregorian.gd),
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ),
   );
 
-  return (date.getUTCDay() + 1) % 7;
+  return (
+    (date.getUTCDay() + 1) % 7
+  );
 }
 
-function parseJalaliDate(dateString: string): {
-  year: number;
-  month: number;
-  day: number;
-} | null {
-  const match = dateString.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+function getMonthTitle(
+  year: number,
+  month: number,
+): string {
+  const monthName =
+    jalaliMonthNames[
+      month - 1
+    ] ?? "";
 
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-
-  if (
-    !Number.isFinite(year) ||
-    !Number.isFinite(month) ||
-    !Number.isFinite(day)
-  ) {
-    return null;
-  }
-
-  return {
+  return `${monthName} ${toPersianDigits(
     year,
-    month,
-    day,
-  };
+  )}`;
 }
 
-function getMonthTitle(calendar: CalendarDay[]): string {
-  if (!calendar.length) {
-    return "تقویم معاملاتی";
-  }
-
-  const parsed = parseJalaliDate(calendar[0].date);
-
-  if (!parsed) {
-    return "تقویم معاملاتی";
-  }
-
-  const monthName = jalaliMonthNames[parsed.month - 1] ?? "";
-
-  return `${monthName} ${parsed.year.toLocaleString("fa-IR")}`;
-}
-
-function getIntensity(profitLoss: number): number {
-  const amount = Math.abs(profitLoss);
+function getIntensity(
+  profitLoss: number,
+): number {
+  const amount = Math.abs(
+    profitLoss,
+  );
 
   if (amount === 0) {
     return 0;
   }
 
-  return Math.min(amount / 800, 1);
+  return Math.min(
+    amount / 800,
+    1,
+  );
 }
 
 function CalendarPage() {
-  const [calendarData, setCalendarData] =
-    useState<CalendarResponse | null>(null);
+  const today = new Date();
 
-  const [loading, setLoading] = useState(true);
+  const [
+    todayJalaliYear,
+    todayJalaliMonth,
+  ] = gregorianToJalali(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    today.getDate(),
+  );
 
-  const [refreshing, setRefreshing] = useState(false);
+  const [
+    selectedYear,
+    setSelectedYear,
+  ] = useState(
+    todayJalaliYear,
+  );
 
-  const [error, setError] = useState<string | null>(null);
+  const [
+    selectedMonth,
+    setSelectedMonth,
+  ] = useState(
+    todayJalaliMonth,
+  );
 
-  const [activePortfolioId, setActivePortfolioId] =
-    useState<string | null>(null);
+  const [
+    calendarData,
+    setCalendarData,
+  ] = useState<CalendarResponse | null>(
+    null,
+  );
 
-  const loadCalendar = useCallback(async () => {
-    const portfolioId = getActivePortfolioId();
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-    setActivePortfolioId(portfolioId);
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
-    if (!portfolioId) {
-      setCalendarData(null);
-      setError("هیچ پرتفولیوی فعالی انتخاب نشده است.");
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null,
+  );
 
-    const token = getAccessToken();
+  const [
+    activePortfolioId,
+    setActivePortfolioId,
+  ] = useState<string | null>(
+    null,
+  );
 
-    if (!token) {
-      setCalendarData(null);
-      setError("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.");
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
+  const loadCalendar =
+    useCallback(
+      async (
+        year: number,
+        month: number,
+        isRefresh = false,
+      ) => {
+        const portfolioId =
+          getActivePortfolioId();
 
-    try {
-      setError(null);
+        setActivePortfolioId(
+          portfolioId,
+        );
 
-      const data = await getCalendar();
+        if (!portfolioId) {
+          setCalendarData(null);
+          setError(
+            "هیچ پرتفولیوی فعالی انتخاب نشده است.",
+          );
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
 
-      setCalendarData(data);
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "خطا در دریافت تقویم معاملاتی";
+        try {
+          setError(null);
 
-      setError(message);
-      setCalendarData(null);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+          if (isRefresh) {
+            setRefreshing(true);
+          } else {
+            setLoading(true);
+          }
+
+          /*
+           * selectedYear / selectedMonth شمسی هستند.
+           * API همچنان سال و ماه میلادی می‌خواهد.
+           */
+          const [
+            gregorianYear,
+            gregorianMonth,
+          ] = jalaliToGregorian(
+            year,
+            month,
+            1,
+          );
+
+          const data =
+            await getCalendar(
+              gregorianYear,
+              gregorianMonth,
+            );
+
+          setCalendarData(data);
+        } catch (err) {
+          const message =
+            err instanceof Error
+              ? err.message
+              : "خطا در دریافت تقویم معاملاتی";
+
+          setError(message);
+          setCalendarData(null);
+        } finally {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      },
+      [],
+    );
 
   useEffect(() => {
-    void loadCalendar();
-  }, [loadCalendar]);
+    void loadCalendar(
+      selectedYear,
+      selectedMonth,
+    );
+  }, [
+    selectedYear,
+    selectedMonth,
+    loadCalendar,
+  ]);
 
   useEffect(() => {
-    const handlePortfolioChanged = () => {
-      setLoading(true);
-      void loadCalendar();
-    };
+    const handlePortfolioChanged =
+      () => {
+        const portfolioId =
+          getActivePortfolioId();
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === ACTIVE_PORTFOLIO_STORAGE_KEY) {
+        setActivePortfolioId(
+          portfolioId,
+        );
+
+        if (!portfolioId) {
+          setCalendarData(null);
+          setError(
+            "هیچ پرتفولیوی فعالی انتخاب نشده است.",
+          );
+          setLoading(false);
+          return;
+        }
+
+        void loadCalendar(
+          selectedYear,
+          selectedMonth,
+        );
+      };
+
+    const handleStorage = (
+      event: StorageEvent,
+    ) => {
+      if (
+        event.key ===
+        ACTIVE_PORTFOLIO_STORAGE_KEY
+      ) {
         handlePortfolioChanged();
       }
     };
@@ -303,7 +638,10 @@ function CalendarPage() {
       handlePortfolioChanged,
     );
 
-    window.addEventListener("storage", handleStorage);
+    window.addEventListener(
+      "storage",
+      handleStorage,
+    );
 
     return () => {
       window.removeEventListener(
@@ -311,77 +649,146 @@ function CalendarPage() {
         handlePortfolioChanged,
       );
 
-      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        "storage",
+        handleStorage,
+      );
     };
-  }, [loadCalendar]);
+  }, [
+    loadCalendar,
+    selectedYear,
+    selectedMonth,
+  ]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadCalendar();
+  const handleRefresh =
+    async () => {
+      await loadCalendar(
+        selectedYear,
+        selectedMonth,
+        true,
+      );
+
+      toast.success(
+        "تقویم به‌روزرسانی شد",
+      );
+    };
+
+  const changeMonth = (
+    direction: number,
+  ) => {
+    let nextMonth =
+      selectedMonth + direction;
+
+    let nextYear =
+      selectedYear;
+
+    if (nextMonth < 1) {
+      nextMonth = 12;
+      nextYear -= 1;
+    }
+
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear += 1;
+    }
+
+    setSelectedYear(nextYear);
+    setSelectedMonth(nextMonth);
   };
 
-  const calendarDays = calendarData?.calendar ?? [];
+  const calendarDays =
+    calendarData?.calendar ?? [];
 
-  const monthTitle = useMemo(
-    () => getMonthTitle(calendarDays),
-    [calendarDays],
+  const monthTitle =
+    getMonthTitle(
+      selectedYear,
+      selectedMonth,
+    );
+
+  const firstDayOffset =
+    useMemo(() => {
+      if (!calendarDays.length) {
+        return 0;
+      }
+
+      const firstDate =
+        parseGregorianDate(
+          calendarDays[0].date,
+        );
+
+      if (!firstDate) {
+        return 0;
+      }
+
+      return getSaturdayFirstWeekday(
+        firstDate.year,
+        firstDate.month,
+        firstDate.day,
+      );
+    }, [calendarDays]);
+
+  const calendarCells =
+    useMemo(() => {
+      const cells: Array<
+        CalendarDay | null
+      > = [];
+
+      for (
+        let index = 0;
+        index < firstDayOffset;
+        index += 1
+      ) {
+        cells.push(null);
+      }
+
+      for (const day of calendarDays) {
+        cells.push(day);
+      }
+
+      return cells;
+    }, [
+      calendarDays,
+      firstDayOffset,
+    ]);
+
+  const totalMonth = toNumber(
+    calendarData?.total_month,
   );
 
-  const firstDayOffset = useMemo(() => {
-    if (!calendarDays.length) {
-      return 0;
-    }
-
-    const firstDate = parseJalaliDate(calendarDays[0].date);
-
-    if (!firstDate) {
-      return 0;
-    }
-
-    return getSaturdayFirstWeekday(
-      firstDate.year,
-      firstDate.month,
-      firstDate.day,
+  const profitableDays =
+    toNumber(
+      calendarData?.profitable_days,
     );
-  }, [calendarDays]);
 
-  const calendarCells = useMemo(() => {
-    const cells: Array<CalendarDay | null> = [];
+  const lossDays = toNumber(
+    calendarData?.loss_days,
+  );
 
-    for (let i = 0; i < firstDayOffset; i += 1) {
-      cells.push(null);
-    }
-
-    for (const day of calendarDays) {
-      cells.push(day);
-    }
-
-    return cells;
-  }, [calendarDays, firstDayOffset]);
-
-  const totalMonth = toNumber(calendarData?.total_month);
-
-  const profitableDays = toNumber(calendarData?.profitable_days);
-
-  const lossDays = toNumber(calendarData?.loss_days);
-
-  const bestDay = toNumber(calendarData?.best_day);
+  const bestDay = toNumber(
+    calendarData?.best_day,
+  );
 
   return (
     <AppShell
       title="تقویم معاملاتی"
       subtitle={
         activePortfolioId
-          ? `نقشه رنگی روزهای سودده و زیان‌ده — ${monthTitle}`
-          : "نقشه رنگی روزهای سودده و زیان‌ده"
+          ? `نقشه روزهای سودده و زیان‌ده — ${monthTitle}`
+          : "نقشه روزهای سودده و زیان‌ده"
       }
       actions={
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="icon"
-            disabled
-            title="دریافت ماه قبل توسط API فعلی پشتیبانی نمی‌شود"
+            onClick={() =>
+              changeMonth(-1)
+            }
+            disabled={
+              loading ||
+              refreshing
+            }
+            title="ماه قبل"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -393,8 +800,14 @@ function CalendarPage() {
           <Button
             variant="outline"
             size="icon"
-            disabled
-            title="دریافت ماه بعد توسط API فعلی پشتیبانی نمی‌شود"
+            onClick={() =>
+              changeMonth(1)
+            }
+            disabled={
+              loading ||
+              refreshing
+            }
+            title="ماه بعد"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -402,8 +815,13 @@ function CalendarPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || refreshing}
+            onClick={
+              handleRefresh
+            }
+            disabled={
+              loading ||
+              refreshing
+            }
             title="به‌روزرسانی"
           >
             {refreshing ? (
@@ -415,20 +833,24 @@ function CalendarPage() {
         </div>
       }
     >
-      {!activePortfolioId && !loading ? (
+      {!activePortfolioId &&
+      !loading ? (
         <div className="card-surface p-6 text-center">
           <div className="text-sm text-muted-foreground">
-            هیچ پرتفولیوی فعالی انتخاب نشده است.
+            هیچ پرتفولیوی فعالی انتخاب نشده
+            است.
           </div>
 
           <div className="mt-2 text-xs text-muted-foreground">
-            ابتدا یک پرتفولیو را انتخاب کنید تا تقویم معاملاتی آن نمایش داده
+            ابتدا یک پرتفولیو را انتخاب کنید
+            تا تقویم معاملاتی آن نمایش داده
             شود.
           </div>
         </div>
       ) : null}
 
-      {error && activePortfolioId ? (
+      {error &&
+      activePortfolioId ? (
         <div className="card-surface p-6">
           <div className="text-sm font-medium text-destructive">
             خطا در دریافت تقویم معاملاتی
@@ -441,7 +863,9 @@ function CalendarPage() {
           <Button
             variant="outline"
             className="mt-4"
-            onClick={handleRefresh}
+            onClick={
+              handleRefresh
+            }
             disabled={refreshing}
           >
             {refreshing ? (
@@ -468,7 +892,10 @@ function CalendarPage() {
         </div>
       ) : null}
 
-      {!loading && !error && activePortfolioId && calendarData ? (
+      {!loading &&
+      !error &&
+      activePortfolioId &&
+      calendarData ? (
         <>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="card-surface p-4">
@@ -478,10 +905,14 @@ function CalendarPage() {
 
               <div
                 className={`mt-2 text-2xl font-bold tabular ${
-                  totalMonth >= 0 ? "gain" : "loss"
+                  totalMonth >= 0
+                    ? "gain"
+                    : "loss"
                 }`}
               >
-                {formatMoney(totalMonth)}
+                {formatMoney(
+                  totalMonth,
+                )}
               </div>
             </div>
 
@@ -491,7 +922,9 @@ function CalendarPage() {
               </div>
 
               <div className="mt-2 text-2xl font-bold tabular gain">
-                {profitableDays.toLocaleString("fa-IR")}
+                {profitableDays.toLocaleString(
+                  "fa-IR",
+                )}
               </div>
             </div>
 
@@ -501,7 +934,9 @@ function CalendarPage() {
               </div>
 
               <div className="mt-2 text-2xl font-bold tabular loss">
-                {lossDays.toLocaleString("fa-IR")}
+                {lossDays.toLocaleString(
+                  "fa-IR",
+                )}
               </div>
             </div>
 
@@ -512,7 +947,9 @@ function CalendarPage() {
 
               <div
                 className={`mt-2 text-2xl font-bold tabular ${
-                  bestDay >= 0 ? "gain" : "loss"
+                  bestDay >= 0
+                    ? "gain"
+                    : "loss"
                 }`}
               >
                 {formatMoney(bestDay)}
@@ -521,10 +958,11 @@ function CalendarPage() {
           </div>
 
           <div className="card-surface mt-6 p-6">
-            {calendarDays.length === 0 ? (
+            {calendarDays.length ===
+            0 ? (
               <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
-                برای پرتفولیوی انتخاب‌شده اطلاعاتی برای تقویم معاملاتی وجود
-                ندارد.
+                برای این ماه اطلاعاتی برای
+                تقویم معاملاتی وجود ندارد.
               </div>
             ) : (
               <>
@@ -547,101 +985,143 @@ function CalendarPage() {
                 </div>
 
                 <div className="grid grid-cols-7 gap-2">
-                  {weekdays.map((weekday) => (
-                    <div
-                      key={weekday}
-                      className="pb-2 text-center text-xs font-medium text-muted-foreground"
-                    >
-                      {weekday}
-                    </div>
-                  ))}
+                  {weekdays.map(
+                    (weekday) => (
+                      <div
+                        key={weekday}
+                        className="pb-2 text-center text-xs font-medium text-muted-foreground"
+                      >
+                        {weekday}
+                      </div>
+                    ),
+                  )}
 
-                  {calendarCells.map((calendarDay, index) => {
-                    if (!calendarDay) {
+                  {calendarCells.map(
+                    (
+                      calendarDay,
+                      index,
+                    ) => {
+                      if (
+                        !calendarDay
+                      ) {
+                        return (
+                          <div
+                            key={`empty-${index}`}
+                            className="aspect-square"
+                          />
+                        );
+                      }
+
+                      const profitLoss =
+                        toNumber(
+                          calendarDay.profit_loss,
+                        );
+
+                      const transactionsCount =
+                        toNumber(
+                          calendarDay.transactions_count,
+                        );
+
+                      const parsedDate =
+                        parseGregorianDate(
+                          calendarDay.date,
+                        );
+
+                      const dayNumber =
+                        parsedDate?.day ??
+                        "";
+
+                      const intensity =
+                        getIntensity(
+                          profitLoss,
+                        );
+
+                      let background =
+                        "oklch(0.22 0.02 255)";
+
+                      if (
+                        profitLoss > 0
+                      ) {
+                        background = `oklch(0.4 ${
+                          0.1 *
+                            intensity +
+                          0.05
+                        } 155 / ${
+                          0.3 +
+                          intensity *
+                            0.5
+                        })`;
+                      } else if (
+                        profitLoss < 0
+                      ) {
+                        background = `oklch(0.4 ${
+                          0.15 *
+                            intensity +
+                          0.05
+                        } 25 / ${
+                          0.3 +
+                          intensity *
+                            0.5
+                        })`;
+                      }
+
                       return (
                         <div
-                          key={`empty-${index}`}
-                          className="aspect-square"
-                        />
-                      );
-                    }
+                          key={
+                            calendarDay.date
+                          }
+                          className="aspect-square rounded-lg border border-border p-2 transition-all hover:scale-[1.02] hover:border-primary/50"
+                          style={{
+                            background,
+                          }}
+                          title={`${calendarDay.date} — ${formatMoney(
+                            profitLoss,
+                          )} — ${transactionsCount.toLocaleString(
+                            "fa-IR",
+                          )} معامله`}
+                        >
+                          <div className="text-xs text-foreground/80 tabular">
+                            {toPersianDigits(
+                              dayNumber,
+                            )}
+                          </div>
 
-                    const profitLoss = toNumber(
-                      calendarDay.profit_loss,
-                    );
+                          {profitLoss !==
+                          0 ? (
+                            <>
+                              <div
+                                className={`mt-2 text-xs font-bold tabular ${
+                                  profitLoss >
+                                  0
+                                    ? "gain"
+                                    : "loss"
+                                }`}
+                              >
+                                {formatMoney(
+                                  profitLoss,
+                                )}
+                              </div>
 
-                    const transactionsCount = toNumber(
-                      calendarDay.transactions_count,
-                    );
-
-                    const parsedDate = parseJalaliDate(
-                      calendarDay.date,
-                    );
-
-                    const dayNumber = parsedDate?.day ?? "";
-
-                    const intensity = getIntensity(profitLoss);
-
-                    const background =
-                      profitLoss > 0
-                        ? `oklch(0.4 ${
-                            0.1 * intensity + 0.05
-                          } 155 / ${0.3 + intensity * 0.5})`
-                        : profitLoss < 0
-                          ? `oklch(0.4 ${
-                              0.15 * intensity + 0.05
-                            } 25 / ${0.3 + intensity * 0.5})`
-                          : "oklch(0.22 0.02 255)";
-
-                    return (
-                      <div
-                        key={calendarDay.date}
-                        className="aspect-square rounded-lg border border-border p-2 transition-all hover:scale-[1.02] hover:border-primary/50"
-                        style={{
-                          background,
-                        }}
-                        title={`${calendarDay.date} — ${formatMoney(
-                          profitLoss,
-                        )} — ${transactionsCount.toLocaleString(
-                          "fa-IR",
-                        )} معامله`}
-                      >
-                        <div className="text-xs text-foreground/80 tabular">
-                          {String(dayNumber).replace(
-                            /\d/g,
-                            (digit) =>
-                              "۰۱۲۳۴۵۶۷۸۹"[Number(digit)] ?? digit,
-                          )}
-                        </div>
-
-                        {profitLoss !== 0 ? (
-                          <>
-                            <div
-                              className={`mt-2 text-xs font-bold tabular ${
-                                profitLoss > 0 ? "gain" : "loss"
-                              }`}
-                            >
-                              {formatMoney(profitLoss)}
-                            </div>
-
-                            <div className="mt-0.5 text-[10px] text-muted-foreground">
+                              <div className="mt-0.5 text-[10px] text-muted-foreground">
+                                {transactionsCount.toLocaleString(
+                                  "fa-IR",
+                                )}{" "}
+                                معامله
+                              </div>
+                            </>
+                          ) : transactionsCount >
+                            0 ? (
+                            <div className="mt-2 text-[10px] text-muted-foreground">
                               {transactionsCount.toLocaleString(
                                 "fa-IR",
                               )}{" "}
                               معامله
                             </div>
-                          </>
-                        ) : transactionsCount > 0 ? (
-                          <div className="mt-2 text-[10px] text-muted-foreground">
-                            {transactionsCount.toLocaleString(
-                              "fa-IR",
-                            )}{" "}
-                            معامله
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                          ) : null}
+                        </div>
+                      );
+                    },
+                  )}
                 </div>
               </>
             )}
