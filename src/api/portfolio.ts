@@ -1,3 +1,4 @@
+
 import { getAccessToken } from "@/lib/auth-storage";
 
 const API_BASE = "/backend";
@@ -9,19 +10,21 @@ export interface Portfolio {
   type?: string;
 
   balance: number;
-  initial: number;
+  initial?: number;
 
   leverage: string;
   currency: string;
-  trades: number;
-  status: string;
+
+  trades?: number;
+  transactions_count?: number;
+
+  status?: string;
 
   is_archived?: boolean;
   archived?: boolean;
 
-  profit_loss?: number | string;
-  transactions_count?: number;
-  profit_percentage?: number | string;
+  profit_loss?: number;
+  profit_percentage?: number;
 
   is_active?: boolean;
   mt_connection?: boolean;
@@ -66,28 +69,64 @@ function getErrorMessage(
   if (
     typeof data === "object" &&
     data !== null &&
-    "detail" in data &&
-    typeof (data as { detail?: unknown }).detail === "string"
+    "detail" in data
   ) {
-    return (data as { detail: string }).detail;
+    const detail = (data as { detail?: unknown }).detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item) => {
+          if (
+            typeof item === "object" &&
+            item !== null &&
+            "msg" in item
+          ) {
+            return String(
+              (item as { msg?: unknown }).msg ?? "",
+            );
+          }
+
+          return String(item);
+        })
+        .filter(Boolean)
+        .join("، ");
+    }
   }
 
   if (
     typeof data === "object" &&
     data !== null &&
-    "message" in data &&
-    typeof (data as { message?: unknown }).message === "string"
+    "message" in data
   ) {
-    return (data as { message: string }).message;
+    const message = (
+      data as { message?: unknown }
+    ).message;
+
+    if (typeof message === "string") {
+      return message;
+    }
   }
 
   if (
     typeof data === "object" &&
     data !== null &&
-    "error" in data &&
-    typeof (data as { error?: unknown }).error === "string"
+    "error" in data
   ) {
-    return (data as { error: string }).error;
+    const error = (
+      data as { error?: unknown }
+    ).error;
+
+    if (typeof error === "string") {
+      return error;
+    }
+  }
+
+  if (typeof data === "string" && data.trim()) {
+    return data;
   }
 
   return fallback;
@@ -109,90 +148,240 @@ async function parseResponse(
   }
 }
 
-/**
- * دریافت تمام پرتفولیوهای کاربر
- *
- * GET /app/portfolio/
- */
-export async function getPortfolios(): Promise<Portfolio[]> {
+function toNumber(
+  value: unknown,
+  fallback = 0,
+): number {
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : fallback;
+}
+
+function normalizePortfolio(
+  value: unknown,
+): Portfolio {
+  const item =
+    typeof value === "object" &&
+    value !== null
+      ? (value as Record<string, unknown>)
+      : {};
+
+  const balance = toNumber(
+    item.balance,
+    0,
+  );
+
+  const profitLoss = toNumber(
+    item.profit_loss,
+    0,
+  );
+
+  const profitPercentage = toNumber(
+    item.profit_percentage,
+    0,
+  );
+
+  const transactionsCount = toNumber(
+    item.transactions_count ??
+      item.trades,
+    0,
+  );
+
+  return {
+    id:
+      typeof item.id === "number" ||
+      typeof item.id === "string"
+        ? item.id
+        : "",
+
+    name: String(
+      item.name ?? "",
+    ),
+
+    broker: String(
+      item.broker ?? "",
+    ),
+
+    type:
+      item.type != null
+        ? String(item.type)
+        : undefined,
+
+    balance,
+
+    initial:
+      item.initial != null
+        ? toNumber(item.initial)
+        : undefined,
+
+    leverage: String(
+      item.leverage ?? "1:100",
+    ),
+
+    currency: String(
+      item.currency ?? "USD",
+    ),
+
+    trades: transactionsCount,
+
+    transactions_count:
+      transactionsCount,
+
+    status:
+      item.status != null
+        ? String(item.status)
+        : undefined,
+
+    is_archived:
+      Boolean(item.is_archived),
+
+    archived:
+      Boolean(item.archived),
+
+    profit_loss:
+      profitLoss,
+
+    profit_percentage:
+      profitPercentage,
+
+    is_active:
+      item.is_active === true,
+
+    mt_connection:
+      item.mt_connection === true,
+
+    created_at:
+      item.created_at != null
+        ? String(item.created_at)
+        : undefined,
+
+    updated_at:
+      item.updated_at != null
+        ? String(item.updated_at)
+        : undefined,
+
+    user:
+      item.user != null
+        ? toNumber(item.user)
+        : undefined,
+  };
+}
+
+function extractPortfolioList(
+  data: unknown,
+): Portfolio[] {
+  if (Array.isArray(data)) {
+    return data.map(
+      normalizePortfolio,
+    );
+  }
+
+  if (
+    typeof data === "object" &&
+    data !== null
+  ) {
+    const object =
+      data as Record<string, unknown>;
+
+    if (
+      Array.isArray(object.portfolios)
+    ) {
+      return object.portfolios.map(
+        normalizePortfolio,
+      );
+    }
+
+    if (
+      Array.isArray(object.results)
+    ) {
+      return object.results.map(
+        normalizePortfolio,
+      );
+    }
+
+    if (
+      Array.isArray(object.data)
+    ) {
+      return object.data.map(
+        normalizePortfolio,
+      );
+    }
+  }
+
+  return [];
+}
+
+async function request(
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> {
   const token = getToken();
 
+  const headers = new Headers(
+    init.headers,
+  );
+
+  headers.set(
+    "Authorization",
+    `Bearer ${token}`,
+  );
+
+  headers.set(
+    "Accept",
+    "application/json",
+  );
+
+  if (
+    init.body &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set(
+      "Content-Type",
+      "application/json",
+    );
+  }
+
   const response = await fetch(
-    `${API_BASE}/app/portfolio/`,
+    `${API_BASE}${path}`,
     {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      ...init,
+      headers,
     },
   );
 
-  const data = await parseResponse(response);
-
-  console.log(
-    "GET /app/portfolio/ response:",
-    data,
-  );
+  const data =
+    await parseResponse(response);
 
   if (!response.ok) {
     throw new Error(
       getErrorMessage(
         data,
-        `خطا در دریافت پرتفولیوها: ${response.status}`,
+        `خطا در درخواست: ${response.status}`,
       ),
     );
   }
 
-  if (Array.isArray(data)) {
-    return data as Portfolio[];
-  }
+  return data;
+}
 
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "results" in data &&
-    Array.isArray(
-      (data as { results?: unknown }).results,
-    )
-  ) {
-    return (
-      data as { results: Portfolio[] }
-    ).results;
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "portfolios" in data &&
-    Array.isArray(
-      (data as { portfolios?: unknown }).portfolios,
-    )
-  ) {
-    return (
-      data as { portfolios: Portfolio[] }
-    ).portfolios;
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "data" in data &&
-    Array.isArray(
-      (data as { data?: unknown }).data,
-    )
-  ) {
-    return (
-      data as { data: Portfolio[] }
-    ).data;
-  }
-
-  console.warn(
-    "ساختار پاسخ GET پرتفولیوها شناخته نشد:",
-    data,
+/**
+ * دریافت پرتفولیوهای فعال
+ *
+ * GET /app/portfolio/
+ */
+export async function getPortfolios(): Promise<
+  Portfolio[]
+> {
+  const data = await request(
+    "/app/portfolio/",
+    {
+      method: "GET",
+    },
   );
 
-  return [];
+  return extractPortfolioList(data);
 }
 
 /**
@@ -203,122 +392,32 @@ export async function getPortfolios(): Promise<Portfolio[]> {
 export async function getArchivedPortfolios(): Promise<
   Portfolio[]
 > {
-  const token = getToken();
-
-  const response = await fetch(
-    `${API_BASE}/app/portfolio/archive/`,
+  const data = await request(
+    "/app/portfolio/archive/",
     {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
     },
   );
 
-  const data = await parseResponse(response);
-
-  console.log(
-    "GET /app/portfolio/archive/ response:",
-    data,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در دریافت پرتفولیوهای آرشیو شده: ${response.status}`,
-      ),
-    );
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "portfolios" in data &&
-    Array.isArray(
-      (data as { portfolios?: unknown }).portfolios,
-    )
-  ) {
-    return (
-      data as { portfolios: Portfolio[] }
-    ).portfolios;
-  }
-
-  if (Array.isArray(data)) {
-    return data as Portfolio[];
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "results" in data &&
-    Array.isArray(
-      (data as { results?: unknown }).results,
-    )
-  ) {
-    return (
-      data as { results: Portfolio[] }
-    ).results;
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "data" in data &&
-    Array.isArray(
-      (data as { data?: unknown }).data,
-    )
-  ) {
-    return (
-      data as { data: Portfolio[] }
-    ).data;
-  }
-
-  console.warn(
-    "ساختار پاسخ GET /app/portfolio/archive/ شناخته نشد:",
-    data,
-  );
-
-  return [];
+  return extractPortfolioList(data);
 }
 
 /**
- * فعال‌سازی پرتفولیو
+ * فعال کردن پرتفولیو
  *
- * GET /app/portfolio/portfolio/{id}/active/
+ * GET /app/portfolio/active/{id}/
  */
 export async function activatePortfolio(
   id: string | number,
 ): Promise<void> {
-  const token = getToken();
-
-  const response = await fetch(
-    `${API_BASE}/app/portfolio/portfolio/${id}/active/`,
+  await request(
+    `/app/portfolio/active/${encodeURIComponent(
+      String(id),
+    )}/`,
     {
       method: "GET",
-      headers: {
-        Accept: "*/*",
-        Authorization: `Bearer ${token}`,
-      },
     },
   );
-
-  const data = await parseResponse(response);
-
-  console.log(
-    `GET /app/portfolio/portfolio/${id}/active/ response:`,
-    data,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در فعال‌سازی پرتفولیو: ${response.status}`,
-      ),
-    );
-  }
 }
 
 /**
@@ -329,56 +428,38 @@ export async function activatePortfolio(
 export async function createPortfolio(
   input: CreatePortfolioInput,
 ): Promise<Portfolio | null> {
-  const token = getToken();
-
-  const body = {
-    name: input.name,
-    broker: input.broker,
-    balance: String(input.balance),
-    currency: input.currency,
-    leverage: input.leverage,
-  };
-
-  const response = await fetch(
-    `${API_BASE}/app/portfolio/add/`,
+  const data = await request(
+    "/app/portfolio/add/",
     {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        name: input.name,
+        broker: input.broker,
+        balance: String(
+          input.balance,
+        ),
+        currency: input.currency,
+        leverage: input.leverage,
+      }),
     },
   );
-
-  const data = await parseResponse(response);
-
-  console.log(
-    "POST /app/portfolio/add/ response:",
-    data,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در ساخت پرتفولیو: ${response.status}`,
-      ),
-    );
-  }
 
   if (
     typeof data === "object" &&
     data !== null &&
-    "portfolio" in data &&
-    typeof (data as { portfolio?: unknown }).portfolio ===
-      "object" &&
-    (data as { portfolio?: unknown }).portfolio !== null
+    "portfolio" in data
   ) {
-    return (
-      data as { portfolio: Portfolio }
+    const portfolio = (
+      data as {
+        portfolio?: unknown;
+      }
     ).portfolio;
+
+    if (portfolio) {
+      return normalizePortfolio(
+        portfolio,
+      );
+    }
   }
 
   return null;
@@ -387,70 +468,46 @@ export async function createPortfolio(
 /**
  * ویرایش پرتفولیو
  *
- * PUT /app/portfolio/portfolio/{id}/edit/
+ * PUT /app/portfolio/edit/{id}/
  */
 export async function updatePortfolio(
   id: string | number,
   input: UpdatePortfolioInput,
 ): Promise<Portfolio | null> {
-  const token = getToken();
-
-  const body = {
-    name: input.name,
-    broker: input.broker,
-    balance: String(input.balance),
-    currency: input.currency,
-    leverage: input.leverage,
-  };
-
-  const response = await fetch(
-    `${API_BASE}/app/portfolio/portfolio/${id}/edit/`,
+  const data = await request(
+    `/app/portfolio/edit/${encodeURIComponent(
+      String(id),
+    )}/`,
     {
       method: "PUT",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        name: input.name,
+        broker: input.broker,
+        balance: String(
+          input.balance,
+        ),
+        currency: input.currency,
+        leverage: input.leverage,
+      }),
     },
   );
 
-  const data = await parseResponse(response);
-
-  console.log(
-    `PUT /app/portfolio/portfolio/${id}/edit/ response:`,
-    data,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در ویرایش پرتفولیو: ${response.status}`,
-      ),
-    );
-  }
-
   if (
     typeof data === "object" &&
     data !== null &&
-    "portfolio" in data &&
-    typeof (data as { portfolio?: unknown }).portfolio ===
-      "object" &&
-    (data as { portfolio?: unknown }).portfolio !== null
+    "portfolio" in data
   ) {
-    return (
-      data as { portfolio: Portfolio }
+    const portfolio = (
+      data as {
+        portfolio?: unknown;
+      }
     ).portfolio;
-  }
 
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    !Array.isArray(data)
-  ) {
-    return data as Portfolio;
+    if (portfolio) {
+      return normalizePortfolio(
+        portfolio,
+      );
+    }
   }
 
   return null;
@@ -459,75 +516,60 @@ export async function updatePortfolio(
 /**
  * آرشیو پرتفولیو
  *
- * PATCH /app/portfolio/portfolio/{id}/archive/
+ * PATCH /app/portfolio/archive/{id}/
  */
 export async function archivePortfolio(
   id: string | number,
 ): Promise<void> {
-  const token = getToken();
-
-  const response = await fetch(
-    `${API_BASE}/app/portfolio/portfolio/${id}/archive/`,
+  await request(
+    `/app/portfolio/archive/${encodeURIComponent(
+      String(id),
+    )}/`,
     {
       method: "PATCH",
-      headers: {
-        Accept: "*/*",
-        Authorization: `Bearer ${token}`,
-      },
     },
   );
-
-  const data = await parseResponse(response);
-
-  console.log(
-    `PATCH /app/portfolio/portfolio/${id}/archive/ response:`,
-    data,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در آرشیو پرتفولیو: ${response.status}`,
-      ),
-    );
-  }
 }
+
+/**
+ * بازیابی پرتفولیو از آرشیو
+ *
+ * PATCH /app/portfolio/archive-out/{id}/
+ */
+export async function restorePortfolio(
+  id: string | number,
+): Promise<void> {
+  await request(
+    `/app/portfolio/archive-out/${encodeURIComponent(
+      String(id),
+    )}/`,
+    {
+      method: "PATCH",
+    },
+  );
+}
+
+/**
+ * نام جایگزین برای بازیابی
+ */
+export const unarchivePortfolio =
+  restorePortfolio;
 
 /**
  * حذف دائمی پرتفولیو
  *
- * DELETE /app/portfolio/portfolio/{id}/delete/
+ * DELETE /app/portfolio/delete/{id}/
  */
 export async function deletePortfolio(
   id: string | number,
 ): Promise<void> {
-  const token = getToken();
-
-  const response = await fetch(
-    `${API_BASE}/app/portfolio/portfolio/${id}/delete/`,
+  await request(
+    `/app/portfolio/delete/${encodeURIComponent(
+      String(id),
+    )}/`,
     {
       method: "DELETE",
-      headers: {
-        Accept: "*/*",
-        Authorization: `Bearer ${token}`,
-      },
     },
   );
-
-  const data = await parseResponse(response);
-
-  console.log(
-    `DELETE /app/portfolio/portfolio/${id}/delete/ response:`,
-    data,
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در حذف پرتفولیو: ${response.status}`,
-      ),
-    );
-  }
 }
+

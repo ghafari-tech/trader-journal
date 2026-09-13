@@ -17,10 +17,9 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 
 import {
-  getCalendar,
-  type CalendarDay,
-  type CalendarResponse,
-} from "@/api/calendar";
+  getTrades,
+  type Trade,
+} from "@/api/trades";
 
 import { toast } from "sonner";
 
@@ -64,6 +63,22 @@ const jalaliMonthNames = [
   "اسفند",
 ];
 
+type DayData = {
+  date: string;
+  jalaliYear: number;
+  jalaliMonth: number;
+  jalaliDay: number;
+  transactions_count: number;
+  profit_loss: number;
+};
+
+type CalendarStats = {
+  total_month: number;
+  profitable_days: number;
+  loss_days: number;
+  best_day: number;
+};
+
 function getActivePortfolioId(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -74,7 +89,7 @@ function getActivePortfolioId(): string | null {
   );
 
   return value && value.trim()
-    ? value
+    ? value.trim()
     : null;
 }
 
@@ -114,45 +129,6 @@ function toPersianDigits(
         Number(digit)
       ] ?? digit,
   );
-}
-
-function parseGregorianDate(
-  dateString: string,
-): {
-  year: number;
-  month: number;
-  day: number;
-} | null {
-  const match =
-    dateString.match(
-      /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/,
-    );
-
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day) ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return null;
-  }
-
-  return {
-    year,
-    month,
-    day,
-  };
 }
 
 /**
@@ -210,7 +186,7 @@ function gregorianToJalali(
   if (
     gm2 > 1 &&
     (gy % 4 === 0 &&
-      gy % 100 !== 0
+    gy % 100 !== 0
       ? true
       : gy % 400 === 0)
   ) {
@@ -400,16 +376,82 @@ function jalaliToGregorian(
 }
 
 /**
- * JavaScript:
- * Sunday = 0
- * Monday = 1
- * ...
- * Saturday = 6
+ * تعداد روزهای ماه شمسی
+ */
+function getJalaliMonthDays(
+  year: number,
+  month: number,
+): number {
+  if (month <= 6) {
+    return 31;
+  }
+
+  if (month <= 11) {
+    return 30;
+  }
+
+  const [, , day] =
+    jalaliToGregorian(
+      year,
+      12,
+      30,
+    );
+
+  const [
+    nextYear,
+    nextMonth,
+    nextDay,
+  ] = gregorianToJalali(
+    ...jalaliToGregorian(
+      year + 1,
+      1,
+      1,
+    ),
+  );
+
+  void day;
+  void nextYear;
+  void nextMonth;
+  void nextDay;
+
+  const [
+    gy,
+    gm,
+    gd,
+  ] = jalaliToGregorian(
+    year,
+    12,
+    29,
+  );
+
+  const [
+    jy,
+    jm,
+    jd,
+  ] = gregorianToJalali(
+    gy,
+    gm,
+    gd,
+  );
+
+  if (
+    jy === year &&
+    jm === 12 &&
+    jd === 29
+  ) {
+    return 30;
+  }
+
+  return 29;
+}
+
+/**
+ * تشخیص روز هفته.
  *
- * تقویم UI از شنبه شروع می‌شود:
- * Saturday = 0
- * Sunday = 1
+ * شنبه = 0
+ * یکشنبه = 1
  * ...
+ * جمعه = 6
  */
 function getSaturdayFirstWeekday(
   year: number,
@@ -429,6 +471,257 @@ function getSaturdayFirstWeekday(
   );
 }
 
+/**
+ * تبدیل تاریخ معامله به یک Date معتبر
+ */
+function parseTradeDate(
+  value: string | null | undefined,
+): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+/**
+ * کل معاملات پرتفولیوی فعال را دریافت می‌کند.
+ *
+ * مهم:
+ * getTrades خودش از backend معاملات پرتفولیوی فعال
+ * را برمی‌گرداند؛ بنابراین تقویم دقیقاً روی همان منبع
+ * داده‌ای ساخته می‌شود که صفحه «معاملات» استفاده می‌کند.
+ */
+async function getAllTrades(): Promise<
+  Trade[]
+> {
+  const allTrades: Trade[] = [];
+
+  let page = 1;
+
+  while (true) {
+    const response =
+      await getTrades(page);
+
+    const pageTrades =
+      response.results?.transactions ??
+      [];
+
+    allTrades.push(
+      ...pageTrades,
+    );
+
+    if (!response.next) {
+      break;
+    }
+
+    page += 1;
+
+    /*
+     * جلوگیری از حلقه بی‌نهایت در صورت
+     * خراب بودن pagination سمت backend.
+     */
+    if (page > 1000) {
+      break;
+    }
+  }
+
+  return allTrades;
+}
+
+/**
+ * تاریخ معامله را دقیقاً با همان منطق صفحه معاملات
+ * مشخص می‌کند:
+ *
+ * closed_at → created_at
+ */
+function getTradeDate(
+  trade: Trade,
+): Date | null {
+  return parseTradeDate(
+    trade.closed_at ??
+      trade.created_at,
+  );
+}
+
+function buildCalendarForMonth(
+  trades: Trade[],
+  jalaliYear: number,
+  jalaliMonth: number,
+): {
+  days: DayData[];
+  stats: CalendarStats;
+} {
+  const daysMap =
+    new Map<string, DayData>();
+
+  /*
+   * همه روزهای ماه را از قبل می‌سازیم.
+   * بنابراین حتی اگر backend فقط روزهای دارای معامله
+   * را برگرداند، ساختار تقویم هیچ‌وقت به‌هم نمی‌ریزد.
+   */
+  const monthDays =
+    getJalaliMonthDays(
+      jalaliYear,
+      jalaliMonth,
+    );
+
+  for (
+    let day = 1;
+    day <= monthDays;
+    day += 1
+  ) {
+    const [
+      gy,
+      gm,
+      gd,
+    ] = jalaliToGregorian(
+      jalaliYear,
+      jalaliMonth,
+      day,
+    );
+
+    const key = `${jalaliYear}/${jalaliMonth}/${day}`;
+
+    daysMap.set(
+      key,
+      {
+        date: `${gy}/${gm}/${gd}`,
+        jalaliYear,
+        jalaliMonth,
+        jalaliDay: day,
+        transactions_count: 0,
+        profit_loss: 0,
+      },
+    );
+  }
+
+  /*
+   * تمام معاملات پرتفولیوی فعال را
+   * در روز شمسی صحیح خود قرار می‌دهیم.
+   */
+  for (const trade of trades) {
+    const date =
+      getTradeDate(trade);
+
+    if (!date) {
+      continue;
+    }
+
+    const [
+      jy,
+      jm,
+      jd,
+    ] = gregorianToJalali(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      date.getDate(),
+    );
+
+    if (
+      jy !== jalaliYear ||
+      jm !== jalaliMonth
+    ) {
+      continue;
+    }
+
+    const key = `${jy}/${jm}/${jd}`;
+
+    const current =
+      daysMap.get(key);
+
+    if (!current) {
+      continue;
+    }
+
+    current.transactions_count += 1;
+
+    current.profit_loss +=
+      toNumber(
+        trade.profit_loss,
+      );
+  }
+
+  const days = Array.from(
+    daysMap.values(),
+  );
+
+  const tradingDays =
+    days.filter(
+      (day) =>
+        day.transactions_count > 0,
+    );
+
+  const totalMonth =
+    tradingDays.reduce(
+      (sum, day) =>
+        sum + day.profit_loss,
+      0,
+    );
+
+  const profitableDays =
+    tradingDays.filter(
+      (day) =>
+        day.profit_loss > 0,
+    ).length;
+
+  const lossDays =
+    tradingDays.filter(
+      (day) =>
+        day.profit_loss < 0,
+    ).length;
+
+  const bestDay =
+    tradingDays.length > 0
+      ? Math.max(
+          ...tradingDays.map(
+            (day) =>
+              day.profit_loss,
+          ),
+        )
+      : 0;
+
+  return {
+    days,
+    stats: {
+      total_month:
+        totalMonth,
+      profitable_days:
+        profitableDays,
+      loss_days:
+        lossDays,
+      best_day:
+        bestDay,
+    },
+  };
+}
+
+function getIntensity(
+  profitLoss: number,
+): number {
+  const amount =
+    Math.abs(profitLoss);
+
+  if (amount === 0) {
+    return 0;
+  }
+
+  return Math.min(
+    amount / 800,
+    1,
+  );
+}
+
 function getMonthTitle(
   year: number,
   month: number,
@@ -441,23 +734,6 @@ function getMonthTitle(
   return `${monthName} ${toPersianDigits(
     year,
   )}`;
-}
-
-function getIntensity(
-  profitLoss: number,
-): number {
-  const amount = Math.abs(
-    profitLoss,
-  );
-
-  if (amount === 0) {
-    return 0;
-  }
-
-  return Math.min(
-    amount / 800,
-    1,
-  );
 }
 
 function CalendarPage() {
@@ -487,11 +763,9 @@ function CalendarPage() {
   );
 
   const [
-    calendarData,
-    setCalendarData,
-  ] = useState<CalendarResponse | null>(
-    null,
-  );
+    trades,
+    setTrades,
+  ] = useState<Trade[]>([]);
 
   const [
     loading,
@@ -513,15 +787,13 @@ function CalendarPage() {
   const [
     activePortfolioId,
     setActivePortfolioId,
-  ] = useState<string | null>(
-    null,
-  );
+  ] = useState<
+    string | null
+  >(null);
 
-  const loadCalendar =
+  const loadTrades =
     useCallback(
       async (
-        year: number,
-        month: number,
         isRefresh = false,
       ) => {
         const portfolioId =
@@ -532,7 +804,7 @@ function CalendarPage() {
         );
 
         if (!portfolioId) {
-          setCalendarData(null);
+          setTrades([]);
           setError(
             "هیچ پرتفولیوی فعالی انتخاب نشده است.",
           );
@@ -551,33 +823,29 @@ function CalendarPage() {
           }
 
           /*
-           * selectedYear / selectedMonth شمسی هستند.
-           * API همچنان سال و ماه میلادی می‌خواهد.
+           * getTrades از backend معاملات
+           * پرتفولیوی فعال را دریافت می‌کند.
+           *
+           * همه صفحات را می‌گیریم تا هیچ معامله‌ای
+           * به خاطر pagination از تقویم حذف نشود.
            */
-          const [
-            gregorianYear,
-            gregorianMonth,
-          ] = jalaliToGregorian(
-            year,
-            month,
-            1,
+          const allTrades =
+            await getAllTrades();
+
+          setTrades(allTrades);
+        } catch (err) {
+          console.error(
+            "Failed to load calendar trades:",
+            err,
           );
 
-          const data =
-            await getCalendar(
-              gregorianYear,
-              gregorianMonth,
-            );
-
-          setCalendarData(data);
-        } catch (err) {
           const message =
             err instanceof Error
               ? err.message
-              : "خطا در دریافت تقویم معاملاتی";
+              : "دریافت معاملات برای تقویم با خطا مواجه شد.";
 
           setError(message);
-          setCalendarData(null);
+          setTrades([]);
         } finally {
           setLoading(false);
           setRefreshing(false);
@@ -587,39 +855,13 @@ function CalendarPage() {
     );
 
   useEffect(() => {
-    void loadCalendar(
-      selectedYear,
-      selectedMonth,
-    );
-  }, [
-    selectedYear,
-    selectedMonth,
-    loadCalendar,
-  ]);
+    void loadTrades();
+  }, [loadTrades]);
 
   useEffect(() => {
     const handlePortfolioChanged =
       () => {
-        const portfolioId =
-          getActivePortfolioId();
-
-        setActivePortfolioId(
-          portfolioId,
-        );
-
-        if (!portfolioId) {
-          setCalendarData(null);
-          setError(
-            "هیچ پرتفولیوی فعالی انتخاب نشده است.",
-          );
-          setLoading(false);
-          return;
-        }
-
-        void loadCalendar(
-          selectedYear,
-          selectedMonth,
-        );
+        void loadTrades();
       };
 
     const handleStorage = (
@@ -654,19 +896,11 @@ function CalendarPage() {
         handleStorage,
       );
     };
-  }, [
-    loadCalendar,
-    selectedYear,
-    selectedMonth,
-  ]);
+  }, [loadTrades]);
 
   const handleRefresh =
     async () => {
-      await loadCalendar(
-        selectedYear,
-        selectedMonth,
-        true,
-      );
+      await loadTrades(true);
 
       toast.success(
         "تقویم به‌روزرسانی شد",
@@ -692,45 +926,64 @@ function CalendarPage() {
       nextYear += 1;
     }
 
-    setSelectedYear(nextYear);
-    setSelectedMonth(nextMonth);
-  };
-
-  const calendarDays =
-    calendarData?.calendar ?? [];
-
-  const monthTitle =
-    getMonthTitle(
-      selectedYear,
-      selectedMonth,
+    setSelectedYear(
+      nextYear,
     );
 
-  const firstDayOffset =
-    useMemo(() => {
-      if (!calendarDays.length) {
-        return 0;
-      }
+    setSelectedMonth(
+      nextMonth,
+    );
+  };
 
-      const firstDate =
-        parseGregorianDate(
-          calendarDays[0].date,
-        );
+  const {
+    days: calendarDays,
+    stats,
+  } = useMemo(
+    () =>
+      buildCalendarForMonth(
+        trades,
+        selectedYear,
+        selectedMonth,
+      ),
+    [
+      trades,
+      selectedYear,
+      selectedMonth,
+    ],
+  );
 
-      if (!firstDate) {
-        return 0;
-      }
+  const [
+    firstDayOffset,
+    setFirstDayOffset,
+  ] = useState(0);
 
-      return getSaturdayFirstWeekday(
-        firstDate.year,
-        firstDate.month,
-        firstDate.day,
-      );
-    }, [calendarDays]);
+  useEffect(() => {
+    const [
+      gy,
+      gm,
+      gd,
+    ] = jalaliToGregorian(
+      selectedYear,
+      selectedMonth,
+      1,
+    );
+
+    setFirstDayOffset(
+      getSaturdayFirstWeekday(
+        gy,
+        gm,
+        gd,
+      ),
+    );
+  }, [
+    selectedYear,
+    selectedMonth,
+  ]);
 
   const calendarCells =
     useMemo(() => {
       const cells: Array<
-        CalendarDay | null
+        DayData | null
       > = [];
 
       for (
@@ -751,22 +1004,11 @@ function CalendarPage() {
       firstDayOffset,
     ]);
 
-  const totalMonth = toNumber(
-    calendarData?.total_month,
-  );
-
-  const profitableDays =
-    toNumber(
-      calendarData?.profitable_days,
+  const monthTitle =
+    getMonthTitle(
+      selectedYear,
+      selectedMonth,
     );
-
-  const lossDays = toNumber(
-    calendarData?.loss_days,
-  );
-
-  const bestDay = toNumber(
-    calendarData?.best_day,
-  );
 
   return (
     <AppShell
@@ -853,7 +1095,7 @@ function CalendarPage() {
       activePortfolioId ? (
         <div className="card-surface p-6">
           <div className="text-sm font-medium text-destructive">
-            خطا در دریافت تقویم معاملاتی
+            دریافت تقویم معاملاتی انجام نشد
           </div>
 
           <div className="mt-2 text-sm text-muted-foreground">
@@ -887,15 +1129,14 @@ function CalendarPage() {
         <div className="card-surface flex min-h-64 items-center justify-center">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            در حال دریافت تقویم معاملاتی...
+            در حال دریافت معاملات پرتفولیوی فعال...
           </div>
         </div>
       ) : null}
 
       {!loading &&
       !error &&
-      activePortfolioId &&
-      calendarData ? (
+      activePortfolioId ? (
         <>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="card-surface p-4">
@@ -905,13 +1146,13 @@ function CalendarPage() {
 
               <div
                 className={`mt-2 text-2xl font-bold tabular ${
-                  totalMonth >= 0
+                  stats.total_month >= 0
                     ? "gain"
                     : "loss"
                 }`}
               >
                 {formatMoney(
-                  totalMonth,
+                  stats.total_month,
                 )}
               </div>
             </div>
@@ -922,7 +1163,7 @@ function CalendarPage() {
               </div>
 
               <div className="mt-2 text-2xl font-bold tabular gain">
-                {profitableDays.toLocaleString(
+                {stats.profitable_days.toLocaleString(
                   "fa-IR",
                 )}
               </div>
@@ -934,7 +1175,7 @@ function CalendarPage() {
               </div>
 
               <div className="mt-2 text-2xl font-bold tabular loss">
-                {lossDays.toLocaleString(
+                {stats.loss_days.toLocaleString(
                   "fa-IR",
                 )}
               </div>
@@ -947,187 +1188,177 @@ function CalendarPage() {
 
               <div
                 className={`mt-2 text-2xl font-bold tabular ${
-                  bestDay >= 0
+                  stats.best_day >= 0
                     ? "gain"
                     : "loss"
                 }`}
               >
-                {formatMoney(bestDay)}
+                {formatMoney(
+                  stats.best_day,
+                )}
               </div>
             </div>
           </div>
 
           <div className="card-surface mt-6 p-6">
-            {calendarDays.length ===
-            0 ? (
-              <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
-                برای این ماه اطلاعاتی برای
-                تقویم معاملاتی وجود ندارد.
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm font-medium">
+                {monthTitle}
               </div>
-            ) : (
-              <>
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="text-sm font-medium">
-                    {monthTitle}
-                  </div>
 
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[oklch(0.55_0.12_155)]" />
-                      سود
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[oklch(0.55_0.12_25)]" />
-                      ضرر
-                    </div>
-                  </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[oklch(0.55_0.12_155)]" />
+                  سود
                 </div>
 
-                <div className="grid grid-cols-7 gap-2">
-                  {weekdays.map(
-                    (weekday) => (
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[oklch(0.55_0.12_25)]" />
+                  ضرر
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {weekdays.map(
+                (weekday) => (
+                  <div
+                    key={weekday}
+                    className="pb-2 text-center text-xs font-medium text-muted-foreground"
+                  >
+                    {weekday}
+                  </div>
+                ),
+              )}
+
+              {calendarCells.map(
+                (
+                  calendarDay,
+                  index,
+                ) => {
+                  if (
+                    !calendarDay
+                  ) {
+                    return (
                       <div
-                        key={weekday}
-                        className="pb-2 text-center text-xs font-medium text-muted-foreground"
-                      >
-                        {weekday}
+                        key={`empty-${index}`}
+                        className="aspect-square"
+                      />
+                    );
+                  }
+
+                  const profitLoss =
+                    toNumber(
+                      calendarDay.profit_loss,
+                    );
+
+                  const transactionsCount =
+                    toNumber(
+                      calendarDay.transactions_count,
+                    );
+
+                  const intensity =
+                    getIntensity(
+                      profitLoss,
+                    );
+
+                  let background =
+                    "oklch(0.22 0.02 255)";
+
+                  if (
+                    profitLoss > 0
+                  ) {
+                    background = `oklch(0.4 ${
+                      0.1 *
+                        intensity +
+                      0.05
+                    } 155 / ${
+                      0.3 +
+                      intensity *
+                        0.5
+                    })`;
+                  } else if (
+                    profitLoss < 0
+                  ) {
+                    background = `oklch(0.4 ${
+                      0.15 *
+                        intensity +
+                      0.05
+                    } 25 / ${
+                      0.3 +
+                      intensity *
+                        0.5
+                    })`;
+                  }
+
+                  return (
+                    <div
+                      key={`${calendarDay.jalaliYear}-${calendarDay.jalaliMonth}-${calendarDay.jalaliDay}`}
+                      className="aspect-square rounded-lg border border-border p-2 transition-all hover:scale-[1.02] hover:border-primary/50"
+                      style={{
+                        background,
+                      }}
+                      title={`${calendarDay.jalaliYear}/${calendarDay.jalaliMonth}/${calendarDay.jalaliDay} — ${formatMoney(
+                        profitLoss,
+                      )} — ${transactionsCount.toLocaleString(
+                        "fa-IR",
+                      )} معامله`}
+                    >
+                      <div className="text-xs text-foreground/80 tabular">
+                        {toPersianDigits(
+                          calendarDay.jalaliDay,
+                        )}
                       </div>
-                    ),
-                  )}
 
-                  {calendarCells.map(
-                    (
-                      calendarDay,
-                      index,
-                    ) => {
-                      if (
-                        !calendarDay
-                      ) {
-                        return (
+                      {profitLoss !==
+                      0 ? (
+                        <>
                           <div
-                            key={`empty-${index}`}
-                            className="aspect-square"
-                          />
-                        );
-                      }
-
-                      const profitLoss =
-                        toNumber(
-                          calendarDay.profit_loss,
-                        );
-
-                      const transactionsCount =
-                        toNumber(
-                          calendarDay.transactions_count,
-                        );
-
-                      const parsedDate =
-                        parseGregorianDate(
-                          calendarDay.date,
-                        );
-
-                      const dayNumber =
-                        parsedDate?.day ??
-                        "";
-
-                      const intensity =
-                        getIntensity(
-                          profitLoss,
-                        );
-
-                      let background =
-                        "oklch(0.22 0.02 255)";
-
-                      if (
-                        profitLoss > 0
-                      ) {
-                        background = `oklch(0.4 ${
-                          0.1 *
-                            intensity +
-                          0.05
-                        } 155 / ${
-                          0.3 +
-                          intensity *
-                            0.5
-                        })`;
-                      } else if (
-                        profitLoss < 0
-                      ) {
-                        background = `oklch(0.4 ${
-                          0.15 *
-                            intensity +
-                          0.05
-                        } 25 / ${
-                          0.3 +
-                          intensity *
-                            0.5
-                        })`;
-                      }
-
-                      return (
-                        <div
-                          key={
-                            calendarDay.date
-                          }
-                          className="aspect-square rounded-lg border border-border p-2 transition-all hover:scale-[1.02] hover:border-primary/50"
-                          style={{
-                            background,
-                          }}
-                          title={`${calendarDay.date} — ${formatMoney(
-                            profitLoss,
-                          )} — ${transactionsCount.toLocaleString(
-                            "fa-IR",
-                          )} معامله`}
-                        >
-                          <div className="text-xs text-foreground/80 tabular">
-                            {toPersianDigits(
-                              dayNumber,
+                            className={`mt-2 text-xs font-bold tabular ${
+                              profitLoss >
+                              0
+                                ? "gain"
+                                : "loss"
+                            }`}
+                          >
+                            {formatMoney(
+                              profitLoss,
                             )}
                           </div>
 
-                          {profitLoss !==
-                          0 ? (
-                            <>
-                              <div
-                                className={`mt-2 text-xs font-bold tabular ${
-                                  profitLoss >
-                                  0
-                                    ? "gain"
-                                    : "loss"
-                                }`}
-                              >
-                                {formatMoney(
-                                  profitLoss,
-                                )}
-                              </div>
-
-                              <div className="mt-0.5 text-[10px] text-muted-foreground">
-                                {transactionsCount.toLocaleString(
-                                  "fa-IR",
-                                )}{" "}
-                                معامله
-                              </div>
-                            </>
-                          ) : transactionsCount >
-                            0 ? (
-                            <div className="mt-2 text-[10px] text-muted-foreground">
-                              {transactionsCount.toLocaleString(
-                                "fa-IR",
-                              )}{" "}
-                              معامله
-                            </div>
-                          ) : null}
+                          <div className="mt-0.5 text-[10px] text-muted-foreground">
+                            {transactionsCount.toLocaleString(
+                              "fa-IR",
+                            )}{" "}
+                            معامله
+                          </div>
+                        </>
+                      ) : transactionsCount >
+                        0 ? (
+                        <div className="mt-2 text-[10px] text-muted-foreground">
+                          {transactionsCount.toLocaleString(
+                            "fa-IR",
+                          )}{" "}
+                          معامله
                         </div>
-                      );
-                    },
-                  )}
-                </div>
-              </>
-            )}
+                      ) : null}
+                    </div>
+                  );
+                },
+              )}
+            </div>
+
+            {trades.length ===
+            0 ? (
+              <div className="mt-6 flex min-h-32 items-center justify-center rounded-lg border border-border bg-secondary/20 text-sm text-muted-foreground">
+                برای این پرتفولیو هیچ معامله‌ای
+                ثبت نشده است.
+              </div>
+            ) : null}
           </div>
         </>
       ) : null}
     </AppShell>
   );
 }
+

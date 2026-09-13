@@ -53,7 +53,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "۱,۰۰۰,۰۰۰",
+    price: "۲۰۰,۰۰۰",
     unit: "تومان / ماه",
     tagline: "برای معامله‌گران فعال",
     features: [
@@ -69,7 +69,7 @@ const plans = [
   },
   {
     name: "Pro Max",
-    price: "۲,۰۰۰,۰۰۰",
+    price: "۵۰۰,۰۰۰",
     unit: "تومان / ماه",
     tagline: "مربی شخصی معامله‌گری",
     features: [
