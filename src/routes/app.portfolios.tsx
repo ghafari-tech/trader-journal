@@ -1,3 +1,4 @@
+import { MetaTraderModal } from "@/components/MetaTraderModal";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
@@ -390,24 +391,28 @@ function Portfolios() {
     <AppShell
       title="پرتفولیوها"
       subtitle="مدیریت حساب‌های معاملاتی و اتصال به بروکرها"
-      actions={
-        <Dialog
-          open={open}
-          onOpenChange={(value) => {
-            setOpen(value);
+     actions={
+        <div className="flex items-center gap-2">
+          {/* کامپوننت اتصال متاتریدر (تسک DEV-71) */}
+          <MetaTraderModal />
 
-            if (!value && !creating) {
-              resetForm();
-            }
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="ml-1 h-4 w-4" />
-              پرتفولیو جدید
-            </Button>
-          </DialogTrigger>
+          {/* دیالوگ پرتفولیو جدید (کد قبلی خودت) */}
+          <Dialog
+            open={open}
+            onOpenChange={(value) => {
+              setOpen(value);
 
+              if (!value && !creating) {
+                resetForm();
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Plus className="ml-1 h-4 w-4" />
+                پرتفولیو جدید
+              </Button>
+            </DialogTrigger>
           <DialogContent
             dir="rtl"
             className="w-[calc(100%-1.5rem)] max-w-lg max-h-[90vh] overflow-y-auto text-right"
@@ -547,6 +552,7 @@ function Portfolios() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       }
     >
       {loading ? (

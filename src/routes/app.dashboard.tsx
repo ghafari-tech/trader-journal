@@ -27,7 +27,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-
+import { MetaTraderModal } from "@/components/MetaTraderModal";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/api/client";
