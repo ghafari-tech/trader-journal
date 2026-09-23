@@ -1,4 +1,5 @@
 import { MetaTraderModal } from "@/components/MetaTraderModal";
+import {ImportTradesModal} from "@/components/ImportTradesModal"
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
@@ -393,7 +394,9 @@ function Portfolios() {
       subtitle="مدیریت حساب‌های معاملاتی و اتصال به بروکرها"
      actions={
         <div className="flex items-center gap-2">
+          <ImportTradesModal />
           {/* کامپوننت اتصال متاتریدر (تسک DEV-71) */}
+
           <MetaTraderModal />
 
           {/* دیالوگ پرتفولیو جدید (کد قبلی خودت) */}
