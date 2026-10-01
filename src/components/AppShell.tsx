@@ -1,9 +1,9 @@
-
 import {
   Link,
   useLocation,
-  useNavigate,
-} from "@tanstack/react-router";import {
+} from "@tanstack/react-router";
+
+import {
   LayoutDashboard,
   Wallet,
   LineChart,
@@ -24,6 +24,7 @@ import {
   Loader2,
   Circle,
 } from "lucide-react";
+
 import {
   useEffect,
   useState,
@@ -31,7 +32,13 @@ import {
 } from "react";
 
 import { apiFetch } from "@/api/client";
-import { getNotifications, type Notification } from "@/api/notification";
+
+import {
+  getNotifications,
+  markNotificationAsRead,
+  type Notification,
+} from "@/api/notification";
+
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -61,6 +68,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { toast } from "sonner";
+
 import {
   clearAuthTokens,
   getRefreshToken,
@@ -133,21 +141,23 @@ const nav = [
 ========================================================= */
 
 type UserApiResponse = {
-  first_name?: string;
-  last_name?: string;
-  email?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
   phone?: string | null;
   image_profile?: string | null;
 };
 
+type PlanData = {
+  id?: number;
+  user?: number;
+  type_display?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+};
+
 type PlanApiResponse = {
-  plan?: {
-    id?: number;
-    user?: number;
-    type_display?: string;
-    start_date?: string;
-    end_date?: string;
-  } | null;
+  plan?: PlanData | null;
 };
 
 /* =========================================================
@@ -163,7 +173,7 @@ function toPersianNumber(
 }
 
 function formatDate(
-  dateString?: string,
+  dateString?: string | null,
 ): string {
   if (!dateString) {
     return "—";
@@ -183,7 +193,7 @@ function formatDate(
 }
 
 function calculateRemainingDays(
-  endDate?: string,
+  endDate?: string | null,
 ): number | null {
   if (!endDate) {
     return null;
@@ -207,9 +217,6 @@ function calculateRemainingDays(
   );
 }
 
-/**
- * تبدیل تاریخ API به متن فارسی
- */
 function formatNotificationTime(
   dateString?: string,
 ): string {
@@ -266,9 +273,35 @@ function formatNotificationTime(
   ).format(date);
 }
 
-/**
- * آیکون اعلان
- */
+function getErrorMessage(
+  error: unknown,
+): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (
+    error &&
+    typeof error === "object"
+  ) {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "خطای ناشناخته";
+    }
+  }
+
+  return "خطای ناشناخته";
+}
+
+/* =========================================================
+   Notification Icon
+========================================================= */
+
 function NotificationIcon({
   notification,
 }: {
@@ -340,19 +373,27 @@ function UserBlock({
     useState<UserApiResponse | null>(null);
 
   const [plan, setPlan] =
-    useState<PlanApiResponse["plan"]>(null);
+    useState<PlanData | null>(null);
 
   const [loading, setLoading] =
     useState(true);
 
-  const [error, setError] =
+  const [userError, setUserError] =
+    useState(false);
+
+  const [planError, setPlanError] =
     useState(false);
 
   async function loadUserData() {
-    try {
-      setLoading(true);
-      setError(false);
+    setLoading(true);
+    setUserError(false);
+    setPlanError(false);
 
+    /* =====================================================
+       USER API
+    ===================================================== */
+
+    try {
       const userResponse =
         await apiFetch<UserApiResponse>(
           "/app/settings/user/",
@@ -361,6 +402,28 @@ function UserBlock({
           },
         );
 
+      console.log(
+        "User information from API:",
+        userResponse,
+      );
+
+      setUser(userResponse);
+    } catch (error) {
+      console.error(
+        "Load user error:",
+        getErrorMessage(error),
+        error,
+      );
+
+      setUser(null);
+      setUserError(true);
+    }
+
+    /* =====================================================
+       PLAN API
+    ===================================================== */
+
+    try {
       const planResponse =
         await apiFetch<PlanApiResponse>(
           "/app/settings/plan/",
@@ -369,20 +432,26 @@ function UserBlock({
           },
         );
 
-      setUser(userResponse);
+      console.log(
+        "Plan information from API:",
+        planResponse,
+      );
+
       setPlan(
         planResponse?.plan ?? null,
       );
-    } catch (err) {
+    } catch (error) {
       console.error(
-        "Load user / plan error:",
-        err,
+        "Load plan error:",
+        getErrorMessage(error),
+        error,
       );
 
-      setError(true);
-    } finally {
-      setLoading(false);
+      setPlan(null);
+      setPlanError(true);
     }
+
+    setLoading(false);
   }
 
   useEffect(() => {
@@ -415,55 +484,9 @@ function UserBlock({
     };
   }, []);
 
-  /* =======================================================
-     Display Name
-  ======================================================= */
-
-  const firstName =
-    user?.first_name?.trim() || "";
-
-  const lastName =
-    user?.last_name?.trim() || "";
-
-  const fullName =
-    `${firstName} ${lastName}`.trim() ||
-    "کاربر";
-
-  const nameParts = fullName
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const displayFirstName =
-    nameParts[0] || "";
-
-  const displayLastName =
-    nameParts.slice(1).join(" ");
-
-  const initials =
-    displayLastName.length > 0
-      ? `${displayFirstName.charAt(0)}${displayLastName.charAt(0)}`
-      : displayFirstName.charAt(0) || "ک";
-
-  /* =======================================================
-     Plan
-  ======================================================= */
-
-  const planName =
-    plan?.type_display?.trim() ||
-    "بدون اشتراک";
-
-  const remainingDays =
-    calculateRemainingDays(
-      plan?.end_date,
-    );
-
-  const isPlanActive =
-    remainingDays !== null &&
-    remainingDays > 0;
-
-  /* =======================================================
-     Loading State
-  ======================================================= */
+  /* =====================================================
+     Loading
+  ===================================================== */
 
   if (loading) {
     return (
@@ -489,11 +512,11 @@ function UserBlock({
     );
   }
 
-  /* =======================================================
-     Error State
-  ======================================================= */
+  /* =====================================================
+     User Error
+  ===================================================== */
 
-  if (error) {
+  if (userError || !user) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -558,9 +581,51 @@ function UserBlock({
     );
   }
 
-  /* =======================================================
-     Main User UI
-  ======================================================= */
+  /* =====================================================
+     User Information
+  ===================================================== */
+
+  const firstName =
+    user.first_name?.trim() || "";
+
+  const lastName =
+    user.last_name?.trim() || "";
+
+  const fullName =
+    `${firstName} ${lastName}`.trim() ||
+    "کاربر";
+
+  const nameParts = fullName
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const displayFirstName =
+    nameParts[0] || "";
+
+  const displayLastName =
+    nameParts.slice(1).join(" ");
+
+  const initials =
+    displayLastName.length > 0
+      ? `${displayFirstName.charAt(0)}${displayLastName.charAt(0)}`
+      : displayFirstName.charAt(0) || "ک";
+
+  const planName =
+    plan?.type_display?.trim() ||
+    "بدون اشتراک";
+
+  const remainingDays =
+    calculateRemainingDays(
+      plan?.end_date,
+    );
+
+  const isPlanActive =
+    remainingDays !== null &&
+    remainingDays > 0;
+
+  /* =====================================================
+     User Dropdown
+  ===================================================== */
 
   return (
     <DropdownMenu>
@@ -613,7 +678,7 @@ function UserBlock({
               {fullName}
             </span>
 
-            {user?.email && (
+            {user.email && (
               <span className="truncate text-[11px] font-normal text-muted-foreground">
                 {user.email}
               </span>
@@ -694,7 +759,9 @@ function UserBlock({
               </>
             ) : (
               <div className="mt-2 text-xs text-muted-foreground">
-                اشتراک فعالی برای حساب شما ثبت نشده است.
+                {planError
+                  ? "اطلاعات اشتراک در حال حاضر قابل دریافت نیست."
+                  : "اشتراک فعالی برای حساب شما ثبت نشده است."}
               </div>
             )}
           </div>
@@ -807,6 +874,9 @@ function NotificationsMenu() {
   const [open, setOpen] =
     useState(false);
 
+  const [readingId, setReadingId] =
+    useState<number | null>(null);
+
   async function loadNotifications() {
     try {
       setLoading(true);
@@ -831,6 +901,62 @@ function NotificationsMenu() {
       setNotifications([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleNotificationClick(
+    notification: Notification,
+  ) {
+    /*
+      اگر قبلاً خوانده شده، هیچ API جدیدی لازم نیست.
+    */
+    if (notification.is_read) {
+      return;
+    }
+
+    /*
+      جلوگیری از ارسال چند درخواست همزمان
+      برای یک اعلان
+    */
+    if (readingId === notification.id) {
+      return;
+    }
+
+    try {
+      setReadingId(notification.id);
+
+      /*
+        PUT /notification/read/{id}/
+      */
+      await markNotificationAsRead(
+        notification.id,
+      );
+
+      /*
+        بعد از موفقیت API، همان اعلان را
+        در state خوانده‌شده می‌کنیم.
+      */
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? {
+                ...item,
+                is_read: true,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      console.error(
+        "Mark notification as read error:",
+        error,
+      );
+
+      toast.error(
+        "خوانده‌شدن اعلان انجام نشد",
+      );
+    } finally {
+      setReadingId(null);
     }
   }
 
@@ -908,8 +1034,10 @@ function NotificationsMenu() {
             {activeNotifications.map(
               (notification) => {
                 const isUnread =
-                  notification.is_read ===
-                  false;
+                  notification.is_read === false;
+
+                const isReading =
+                  readingId === notification.id;
 
                 return (
                   <DropdownMenuItem
@@ -919,6 +1047,11 @@ function NotificationsMenu() {
                       isUnread &&
                         "bg-primary/5",
                     )}
+                    onSelect={() => {
+                      void handleNotificationClick(
+                        notification,
+                      );
+                    }}
                   >
                     <div
                       className={cn(
@@ -928,15 +1061,20 @@ function NotificationsMenu() {
                           : "bg-secondary text-muted-foreground",
                       )}
                     >
-                      <NotificationIcon
-                        notification={
-                          notification
-                        }
-                      />
-
-                      {isUnread && (
-                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
+                      {isReading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <NotificationIcon
+                          notification={
+                            notification
+                          }
+                        />
                       )}
+
+                      {isUnread &&
+                        !isReading && (
+                          <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
+                        )}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -962,9 +1100,10 @@ function NotificationsMenu() {
                       </div>
                     </div>
 
-                    {isUnread && (
-                      <Circle className="mt-1 h-2 w-2 shrink-0 fill-primary text-primary" />
-                    )}
+                    {isUnread &&
+                      !isReading && (
+                        <Circle className="mt-1 h-2 w-2 shrink-0 fill-primary text-primary" />
+                      )}
                   </DropdownMenuItem>
                 );
               },
@@ -1051,7 +1190,7 @@ export function AppShell({
 
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
 
-            {/* Mobile menu */}
+            {/* Mobile Menu */}
 
             <Sheet
               open={mobileOpen}
@@ -1136,29 +1275,24 @@ export function AppShell({
 
                 <NotificationsMenu />
 
-                <Link
-                  to="/app/trades/new"
-                  className="hidden sm:block"
-                >
-                  <Button
-                    size="sm"
-                    className="h-10 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    <Plus className="h-4 w-4" />
-                    معامله جدید
-                  </Button>
-                </Link>
+                {/* Desktop New Trade */}
 
                 <Link
                   to="/app/trades/new"
-                  className="sm:hidden"
+                  className="hidden h-10 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:flex"
                 >
-                  <Button
-                    size="icon"
-                    className="h-10 w-10 bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <Plus className="h-4 w-4" />
+                  معامله جدید
+                </Link>
+
+                {/* Mobile New Trade */}
+
+                <Link
+                  to="/app/trades/new"
+                  className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:hidden"
+                  aria-label="معامله جدید"
+                >
+                  <Plus className="h-4 w-4" />
                 </Link>
 
               </div>
