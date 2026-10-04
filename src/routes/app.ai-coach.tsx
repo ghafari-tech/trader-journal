@@ -71,32 +71,26 @@ function AiCoach() {
         getAiCoachAnalysis(),
       ]);
 
-      if (
-        modelsResult.status === "rejected" &&
-        analysisResult.status === "rejected"
-      ) {
-        throw modelsResult.reason;
+      // چک کردن احراز هویت برای خطاهای رخ‌داده
+      if (modelsResult.status === "rejected" && (await handleAuthError(modelsResult.reason))) return;
+      if (analysisResult.status === "rejected" && (await handleAuthError(analysisResult.reason))) return;
+
+      // اگر هر دو ریکوئست شکست خوردند، صفحه خطا نمایش داده شود
+      if (modelsResult.status === "rejected" && analysisResult.status === "rejected") {
+        const err = modelsResult.reason;
+        throw new Error(err instanceof Error ? err.message : "دریافت اطلاعات مربی هوشمند ناموفق بود");
       }
 
-      if (modelsResult.status === "rejected") {
-        if (await handleAuthError(modelsResult.reason)) return;
-        throw modelsResult.reason;
-      }
-
-      if (analysisResult.status === "rejected") {
-        if (await handleAuthError(analysisResult.reason)) return;
-        throw analysisResult.reason;
-      }
-
-      const modelList = modelsResult.value;
-      const currentAnalysis = analysisResult.value;
+      const modelList = modelsResult.status === "fulfilled" ? modelsResult.value : [];
+      const currentAnalysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
 
       setModels(modelList);
       setAnalysis(currentAnalysis);
 
+      // تعیین مدل فعال
       const preferredId =
         currentAnalysis?.modelId &&
-        modelList.some((item) => item.id === currentAnalysis.modelId)
+        modelList.some((item) => String(item.id) === String(currentAnalysis.modelId))
           ? currentAnalysis.modelId
           : modelList[0]?.id;
 
@@ -104,7 +98,6 @@ function AiCoach() {
         setModelId(String(preferredId));
       }
     } catch (err) {
-      if (await handleAuthError(err)) return;
       setError(err instanceof Error ? err.message : "دریافت تحلیل مربی هوشمند ناموفق بود");
     } finally {
       setLoading(false);
@@ -116,19 +109,24 @@ function AiCoach() {
   }, []);
 
   async function handleRegenerate() {
-    const selectedId = Number(modelId);
-    if (!Number.isFinite(selectedId) || selectedId <= 0) {
+    if (!modelId) {
       toast.error("ابتدا یک مدل مربی انتخاب کنید");
       return;
     }
 
+    const selectedId = Number(modelId);
+    // اگر IDها عددی هستند بررسی کنید؛ در غیر این صورت می‌توانید تبدیل به Number را حذف کنید
+    const parsedId = Number.isNaN(selectedId) ? modelId : selectedId;
+
     try {
       setRegenerating(true);
-      const next = await regenerateAiCoachAnalysis(selectedId);
+      const next = await regenerateAiCoachAnalysis(parsedId as number);
       setAnalysis(next);
+
       if (next?.modelId) {
         setModelId(String(next.modelId));
       }
+
       toast.success(
         activeModel
           ? `تحلیل جدید با ${activeModel.name} آماده شد`
@@ -143,11 +141,12 @@ function AiCoach() {
   }
 
   const userName = getCurrentUserFullName();
-  const heroText = analysis?.summary
-    ? analysis.summary.startsWith(userName)
+  const heroText = useMemo(() => {
+    if (!analysis?.summary) return "";
+    return analysis.summary.startsWith(userName)
       ? analysis.summary
-      : `${userName} عزیز — ${analysis.summary}`
-    : "";
+      : `${userName} عزیز — ${analysis.summary}`;
+  }, [analysis?.summary, userName]);
 
   if (loading) {
     return (
@@ -213,7 +212,8 @@ function AiCoach() {
               </div>
             </div>
           </div>
-          <Select value={modelId} onValueChange={setModelId} disabled={!models.length}>
+
+          <Select value={modelId} onValueChange={setModelId} disabled={!models.length || regenerating}>
             <SelectTrigger className="bg-secondary/60 md:max-w-sm">
               <SelectValue placeholder="انتخاب مدل" />
             </SelectTrigger>
@@ -230,6 +230,7 @@ function AiCoach() {
               ))}
             </SelectContent>
           </Select>
+
           <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
             <Brain className="ml-1 h-3 w-3" /> فعال
           </Badge>
@@ -265,7 +266,7 @@ function AiCoach() {
             </div>
           ) : null}
 
-          {analysis.scores.length ? (
+          {analysis.scores?.length ? (
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {analysis.scores.map((score) => (
                 <div key={score.label} className="card-surface p-5">
@@ -280,7 +281,7 @@ function AiCoach() {
             </div>
           ) : null}
 
-          {analysis.strengths.length || analysis.weaknesses.length ? (
+          {analysis.strengths?.length || analysis.weaknesses?.length ? (
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
               <div className="card-surface p-5">
                 <div className="flex items-center gap-2">
@@ -362,19 +363,19 @@ function AiCoach() {
               </TabsList>
 
               <TabsContent value="weekly" className="mt-4 space-y-4">
-                {analysis.weeklyReport.range ? (
+                {analysis.weeklyReport?.range ? (
                   <div className="text-xs text-muted-foreground">
                     بازه: <span className="tabular">{analysis.weeklyReport.range}</span>
                   </div>
                 ) : null}
-                {analysis.weeklyReport.summary ? (
+                {analysis.weeklyReport?.summary ? (
                   <p className="text-sm leading-relaxed text-foreground/90">
                     {analysis.weeklyReport.summary}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">گزارش هفتگی هنوز آماده نیست.</p>
                 )}
-                {analysis.weeklyReport.stats.length ? (
+                {analysis.weeklyReport?.stats?.length ? (
                   <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     {analysis.weeklyReport.stats.map((stat) => (
                       <div key={stat.label} className="rounded-lg border border-border bg-secondary/40 p-3">
@@ -384,30 +385,32 @@ function AiCoach() {
                     ))}
                   </div>
                 ) : null}
-                <ul className="space-y-2 text-sm">
-                  {analysis.weeklyReport.highlights.map((item) => (
-                    <li key={item} className="flex items-start gap-2 rounded-lg border border-border bg-secondary/30 p-3">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                      <span className="text-foreground/90">{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                {analysis.weeklyReport?.highlights?.length ? (
+                  <ul className="space-y-2 text-sm">
+                    {analysis.weeklyReport.highlights.map((item) => (
+                      <li key={item} className="flex items-start gap-2 rounded-lg border border-border bg-secondary/30 p-3">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                        <span className="text-foreground/90">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </TabsContent>
 
               <TabsContent value="daily" className="mt-4 space-y-4">
-                {analysis.dailyReport.date ? (
+                {analysis.dailyReport?.date ? (
                   <div className="text-xs text-muted-foreground">
                     تاریخ: <span className="tabular">{analysis.dailyReport.date}</span>
                   </div>
                 ) : null}
-                {analysis.dailyReport.summary ? (
+                {analysis.dailyReport?.summary ? (
                   <p className="text-sm leading-relaxed text-foreground/90">
                     {analysis.dailyReport.summary}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">گزارش روزانه هنوز آماده نیست.</p>
                 )}
-                {analysis.dailyReport.stats.length ? (
+                {analysis.dailyReport?.stats?.length ? (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {analysis.dailyReport.stats.map((stat) => (
                       <div key={stat.label} className="rounded-lg border border-border bg-secondary/40 p-3">
@@ -417,14 +420,16 @@ function AiCoach() {
                     ))}
                   </div>
                 ) : null}
-                <ul className="space-y-2 text-sm">
-                  {analysis.dailyReport.highlights.map((item) => (
-                    <li key={item} className="flex items-start gap-2 rounded-lg border border-border bg-secondary/30 p-3">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                      <span className="text-foreground/90">{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                {analysis.dailyReport?.highlights?.length ? (
+                  <ul className="space-y-2 text-sm">
+                    {analysis.dailyReport.highlights.map((item) => (
+                      <li key={item} className="flex items-start gap-2 rounded-lg border border-border bg-secondary/30 p-3">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                        <span className="text-foreground/90">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </TabsContent>
             </Tabs>
           </div>
@@ -434,7 +439,7 @@ function AiCoach() {
               <h3 className="font-semibold">الگوهای رفتاری شناسایی‌شده</h3>
               <p className="text-xs text-muted-foreground">تعداد دفعات در ۳۰ روز اخیر</p>
               <div className="mt-4 h-64">
-                {analysis.behaviors.length ? (
+                {analysis.behaviors?.length ? (
                   <ResponsiveContainer>
                     <BarChart data={analysis.behaviors} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.28 0.02 255)" horizontal={false} />
@@ -476,7 +481,7 @@ function AiCoach() {
                 <h3 className="font-semibold">تمرین‌های پیشنهادی</h3>
               </div>
               <ul className="mt-4 space-y-3 text-sm">
-                {analysis.suggestions.length ? (
+                {analysis.suggestions?.length ? (
                   analysis.suggestions.map((item, index) => (
                     <li key={item} className="flex items-start gap-2 rounded-lg border border-border bg-secondary/40 p-3">
                       <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary/20 text-[10px] font-bold text-primary tabular">

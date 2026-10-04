@@ -1,10 +1,8 @@
-
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Users,
   CreditCard,
   Cpu,
-  Activity,
   Plus,
   MoreVertical,
   TrendingUp,
@@ -118,10 +116,6 @@ function getUserStatus(user: AdminUser): {
   label: string;
   className: string;
 } {
-  /*
-   * اگر API مقدار is_active داشته باشد،
-   * این مقدار اولویت دارد.
-   */
   if (typeof user.is_active === "boolean") {
     if (user.is_active) {
       return {
@@ -138,10 +132,6 @@ function getUserStatus(user: AdminUser): {
     };
   }
 
-  /*
-   * اگر API به‌جای is_active از status استفاده کند،
-   * مقدار status را بررسی می‌کنیم.
-   */
   const rawStatus =
     user.status?.trim().toLowerCase() ?? "";
 
@@ -167,12 +157,6 @@ function getUserStatus(user: AdminUser): {
     };
   }
 
-  /*
-   * اگر API وضعیت دیگری فرستاد،
-   * همان مقدار را نمایش می‌دهیم ولی
-   * به‌صورت پیش‌فرض قرمز در نظر می‌گیریم
-   * تا وضعیت ناشناخته اشتباهاً فعال نمایش داده نشود.
-   */
   if (rawStatus) {
     return {
       label: user.status!,
@@ -181,10 +165,6 @@ function getUserStatus(user: AdminUser): {
     };
   }
 
-  /*
-   * اگر هیچ status یا is_active وجود نداشت،
-   * فعلاً غیرفعال در نظر می‌گیریم.
-   */
   return {
     label: "غیرفعال",
     className:
@@ -306,10 +286,6 @@ function AdminPage() {
 
             <TabsTrigger value="apis">
               API هوش مصنوعی
-            </TabsTrigger>
-
-            <TabsTrigger value="logs">
-              لاگ‌ها
             </TabsTrigger>
           </TabsList>
 
@@ -581,18 +557,6 @@ function AdminPage() {
                     </Button>
                   </div>
                 ))}
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* لاگ‌ها */}
-          <TabsContent
-            value="logs"
-            className="mt-4"
-          >
-            <div className="card-surface p-5">
-              <div className="flex min-h-32 items-center justify-center text-sm text-muted-foreground">
-                لاگ‌ها هنوز به API متصل نشده‌اند.
               </div>
             </div>
           </TabsContent>

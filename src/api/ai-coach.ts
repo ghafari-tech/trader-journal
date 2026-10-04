@@ -479,3 +479,4 @@ export async function regenerateAiCoachAnalysis(
 
   return normalizeAnalysis(payload) ?? getAiCoachAnalysis();
 }
+
