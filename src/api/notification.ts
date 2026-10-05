@@ -33,3 +33,19 @@ export async function getNotifications(): Promise<Notification[]> {
     ? response.notifications
     : [];
 }
+
+/**
+ * علامت‌گذاری اعلان به عنوان خوانده‌شده
+ *
+ * PUT /notification/read/{id}/
+ */
+export async function markNotificationAsRead(
+  id: number,
+): Promise<void> {
+  await apiFetch(
+    `/notification/read/${id}/`,
+    {
+      method: "PUT",
+    },
+  );
+}

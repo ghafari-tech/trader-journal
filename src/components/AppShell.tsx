@@ -30,6 +30,7 @@ import {
 import { apiFetch } from "@/api/client";
 import {
   getNotifications,
+  markNotificationAsRead,
   type Notification,
 } from "@/api/notification";
 import { cn } from "@/lib/utils";
@@ -841,6 +842,48 @@ function NotificationsMenu() {
     }
   }
 
+  /**
+   * خوانده‌شده کردن اعلان
+   *
+   * فقط اگر اعلان هنوز خوانده نشده باشد
+   * API مربوط به read فراخوانی می‌شود.
+   */
+  async function handleNotificationClick(
+    notification: Notification,
+  ) {
+    // اگر قبلاً خوانده شده، دوباره API را صدا نزن
+    if (notification.is_read) {
+      return;
+    }
+
+    try {
+      // PUT /notification/read/{id}/
+      await markNotificationAsRead(
+        notification.id,
+      );
+
+      // بعد از موفقیت API، وضعیت همان اعلان
+      // را در state تغییر می‌دهیم.
+      setNotifications(
+        (currentNotifications) =>
+          currentNotifications.map(
+            (item) =>
+              item.id === notification.id
+                ? {
+                    ...item,
+                    is_read: true,
+                  }
+                : item,
+          ),
+      );
+    } catch (error) {
+      console.error(
+        "Mark notification as read error:",
+        error,
+      );
+    }
+  }
+
   useEffect(() => {
     void loadNotifications();
   }, []);
@@ -926,6 +969,11 @@ function NotificationsMenu() {
                       isUnread &&
                         "bg-primary/5",
                     )}
+                    onSelect={() => {
+                      void handleNotificationClick(
+                        notification,
+                      );
+                    }}
                   >
                     <div
                       className={cn(
@@ -1213,3 +1261,4 @@ export function AppShell({
     </div>
   );
 }
+
