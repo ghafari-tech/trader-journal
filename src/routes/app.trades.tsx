@@ -1,9 +1,4 @@
-
-import {
-  Link,
-  createFileRoute,
-} from "@tanstack/react-router";
-
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
   Filter,
@@ -15,16 +10,9 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
-
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
-
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -49,13 +37,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { toast } from "sonner";
-
 import {
   getTrades,
   type Trade,
   type TradesResponse,
 } from "@/api/trades";
+
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/trades")({
   head: () => ({
@@ -64,47 +52,11 @@ export const Route = createFileRoute("/app/trades")({
   component: TradesPage,
 });
 
-/* =========================================================
-   Active Portfolio
-========================================================= */
-
 const ACTIVE_PORTFOLIO_STORAGE_KEY =
   "traderjournal-active-portfolio";
 
 const ACTIVE_PORTFOLIO_CHANGED_EVENT =
   "traderjournal-active-portfolio-changed";
-
-/* تعداد معاملات هر صفحه */
-const PAGE_SIZE = 10;
-
-/* =========================================================
-   Helpers
-========================================================= */
-
-function getActivePortfolioId(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const portfolioId = localStorage.getItem(
-    ACTIVE_PORTFOLIO_STORAGE_KEY,
-  );
-
-  return portfolioId && portfolioId.trim()
-    ? portfolioId
-    : null;
-}
-
-function createEmptyPagination(): TradesResponse {
-  return {
-    count: 0,
-    next: null,
-    previous: null,
-    results: {
-      transactions: [],
-    },
-  };
-}
 
 function toNumber(
   value: string | number | null | undefined,
@@ -125,23 +77,27 @@ function toNumber(
 }
 
 function formatNumber(
-  value: string | number | null | undefined,
+  value: string | number,
 ): string {
-  return toNumber(value).toLocaleString("en-US", {
+  const numberValue = toNumber(value);
+
+  return numberValue.toLocaleString("en-US", {
     maximumFractionDigits: 2,
   });
 }
 
 function formatPrice(
-  value: string | number | null | undefined,
+  value: string | number,
 ): string {
-  return toNumber(value).toLocaleString("en-US", {
+  const numberValue = toNumber(value);
+
+  return numberValue.toLocaleString("en-US", {
     maximumFractionDigits: 5,
   });
 }
 
 function formatDate(
-  date: string | null | undefined,
+  date: string | null,
 ): string {
   if (!date) {
     return "-";
@@ -156,29 +112,45 @@ function formatDate(
   return parsedDate.toLocaleDateString("fa-IR");
 }
 
-function getTotalPages(count: number): number {
-  if (count <= 0) {
+function getActivePortfolioId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const portfolioId = localStorage.getItem(
+    ACTIVE_PORTFOLIO_STORAGE_KEY,
+  );
+
+  return portfolioId && portfolioId.trim()
+    ? portfolioId
+    : null;
+}
+
+function getTotalPages(
+  count: number,
+  pageSize: number,
+): number {
+  if (count <= 0 || pageSize <= 0) {
     return 1;
   }
 
-  return Math.ceil(count / PAGE_SIZE);
+  return Math.ceil(count / pageSize);
 }
-
-/* =========================================================
-   Page
-========================================================= */
 
 function TradesPage() {
   const [query, setQuery] = useState("");
 
-  const [side, setSide] =
-    useState<"all" | "buy" | "sell">("all");
+  const [side, setSide] = useState<
+    "all" | "buy" | "sell"
+  >("all");
 
-  const [plan, setPlan] =
-    useState<"all" | "yes" | "no">("all");
+  const [plan, setPlan] = useState<
+    "all" | "yes" | "no"
+  >("all");
 
-  const [result, setResult] =
-    useState<"all" | "win" | "loss">("all");
+  const [result, setResult] = useState<
+    "all" | "win" | "loss"
+  >("all");
 
   const [filterOpen, setFilterOpen] =
     useState(false);
@@ -186,23 +158,25 @@ function TradesPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
 
   const [pagination, setPagination] =
-    useState<TradesResponse>(createEmptyPagination());
+    useState<TradesResponse>({
+      count: 0,
+      next: null,
+      previous: null,
+      results: {
+        transactions: [],
+      },
+    });
 
   const [page, setPage] = useState(1);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  const [
-    activePortfolioId,
-    setActivePortfolioId,
-  ] = useState<string | null>(null);
-
-  /* =======================================================
-     Load Trades
-  ======================================================= */
+  const [activePortfolioId, setActivePortfolioId] =
+    useState<string | null>(null);
 
   const loadTrades = useCallback(
     async (targetPage: number) => {
@@ -210,19 +184,14 @@ function TradesPage() {
         setLoading(true);
         setError(null);
 
-        const safePage = Math.max(
-          1,
-          Math.floor(targetPage),
-        );
-
-        const data = await getTrades(safePage);
+        const data = await getTrades(targetPage);
 
         const transactions =
           data.results?.transactions ?? [];
 
         setTrades(transactions);
         setPagination(data);
-        setPage(safePage);
+        setPage(targetPage);
       } catch (err) {
         console.error(
           "Failed to load trades:",
@@ -243,10 +212,6 @@ function TradesPage() {
     [],
   );
 
-  /* =======================================================
-     Initial Load
-  ======================================================= */
-
   useEffect(() => {
     const portfolioId =
       getActivePortfolioId();
@@ -255,22 +220,15 @@ function TradesPage() {
 
     if (!portfolioId) {
       setTrades([]);
-      setPagination(createEmptyPagination());
-      setPage(1);
       setLoading(false);
       setError(
         "هیچ پرتفولیوی فعالی انتخاب نشده است.",
       );
-
       return;
     }
 
     void loadTrades(1);
   }, [loadTrades]);
-
-  /* =======================================================
-     Portfolio Change Listener
-  ======================================================= */
 
   useEffect(() => {
     const handlePortfolioChange = () => {
@@ -279,58 +237,41 @@ function TradesPage() {
 
       setActivePortfolioId(portfolioId);
       setPage(1);
-      setTrades([]);
-      setPagination(createEmptyPagination());
 
       if (!portfolioId) {
+        setTrades([]);
         setLoading(false);
         setError(
           "هیچ پرتفولیوی فعالی انتخاب نشده است.",
         );
-
         return;
       }
 
       void loadTrades(1);
     };
 
-    const handleStorage = (
-      event: StorageEvent,
-    ) => {
-      if (
-        event.key ===
-        ACTIVE_PORTFOLIO_STORAGE_KEY
-      ) {
-        handlePortfolioChange();
-      }
-    };
+    window.addEventListener(
+      "storage",
+      handlePortfolioChange,
+    );
 
     window.addEventListener(
       ACTIVE_PORTFOLIO_CHANGED_EVENT,
       handlePortfolioChange,
     );
 
-    window.addEventListener(
-      "storage",
-      handleStorage,
-    );
-
     return () => {
       window.removeEventListener(
-        ACTIVE_PORTFOLIO_CHANGED_EVENT,
+        "storage",
         handlePortfolioChange,
       );
 
       window.removeEventListener(
-        "storage",
-        handleStorage,
+        ACTIVE_PORTFOLIO_CHANGED_EVENT,
+        handlePortfolioChange,
       );
     };
   }, [loadTrades]);
-
-  /* =======================================================
-     Filters
-  ======================================================= */
 
   const filtered = useMemo(() => {
     return trades.filter((trade) => {
@@ -400,23 +341,25 @@ function TradesPage() {
     result,
   ]);
 
-  /* =======================================================
-     Pagination
-  ======================================================= */
+  const pageSize =
+    trades.length > 0
+      ? trades.length
+      : 10;
 
   const totalPages = getTotalPages(
     pagination.count,
+    pageSize,
   );
 
   const startItem =
     pagination.count > 0
-      ? (page - 1) * PAGE_SIZE + 1
+      ? (page - 1) * pageSize + 1
       : 0;
 
   const endItem =
     pagination.count > 0
       ? Math.min(
-          page * PAGE_SIZE,
+          page * pageSize,
           pagination.count,
         )
       : 0;
@@ -430,19 +373,22 @@ function TradesPage() {
       return;
     }
 
-    void loadTrades(page - 1);
+    const previousPage = page - 1;
+
+    void loadTrades(previousPage);
   };
 
   const handleNextPage = () => {
     if (
       loading ||
-      !pagination.next ||
-      page >= totalPages
+      !pagination.next
     ) {
       return;
     }
 
-    void loadTrades(page + 1);
+    const nextPage = page + 1;
+
+    void loadTrades(nextPage);
   };
 
   const handleRefresh = () => {
@@ -453,19 +399,6 @@ function TradesPage() {
     void loadTrades(page);
   };
 
-  const resetFilters = () => {
-    setQuery("");
-    setSide("all");
-    setPlan("all");
-    setResult("all");
-
-    toast.success("فیلترها پاک شد");
-  };
-
-  /* =======================================================
-     UI
-  ======================================================= */
-
   return (
     <AppShell
       title="معاملات"
@@ -475,8 +408,8 @@ function TradesPage() {
           <Button
             variant="outline"
             onClick={() =>
-              toast.info(
-                "خروجی CSV در نسخه فعلی فعال نیست.",
+              toast.success(
+                "خروجی CSV به‌زودی آماده می‌شود",
               )
             }
           >
@@ -494,8 +427,6 @@ function TradesPage() {
       }
     >
       <div className="card-surface p-5">
-        {/* Toolbar */}
-
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
           <Input
             value={query}
@@ -547,13 +478,12 @@ function TradesPage() {
                   </DialogTitle>
 
                   <DialogDescription>
-                    معاملات را بر اساس معیارهای زیر فیلتر کنید.
+                    معاملات را بر اساس معیارهای زیر
+                    فیلتر کن.
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="mt-4 space-y-4">
-                  {/* Side */}
-
                   <div className="space-y-2">
                     <Label>
                       نوع معامله
@@ -590,8 +520,6 @@ function TradesPage() {
                     </Select>
                   </div>
 
-                  {/* Plan */}
-
                   <div className="space-y-2">
                     <Label>
                       پایبندی به پلن
@@ -627,8 +555,6 @@ function TradesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {/* Result */}
 
                   <div className="space-y-2">
                     <Label>
@@ -671,7 +597,15 @@ function TradesPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={resetFilters}
+                    onClick={() => {
+                      setSide("all");
+                      setPlan("all");
+                      setResult("all");
+
+                      toast.success(
+                        "فیلترها پاک شد",
+                      );
+                    }}
                   >
                     پاک کردن
                   </Button>
@@ -687,37 +621,27 @@ function TradesPage() {
           </div>
         </div>
 
-        {/* No Active Portfolio */}
-
         {!activePortfolioId &&
         !loading ? (
           <div className="mt-5 rounded-lg border border-border bg-secondary/30 p-8 text-center">
             <p className="font-medium">
-              هیچ پرتفولیوی فعالی انتخاب نشده است.
+              هیچ پرتفولیوی فعالی انتخاب نشده
+              است.
             </p>
 
             <p className="mt-2 text-sm text-muted-foreground">
-              ابتدا یک پرتفولیو را فعال کنید تا معاملات آن نمایش داده شود.
+              ابتدا یک پرتفولیو را فعال کنید تا
+              معاملات آن نمایش داده شود.
             </p>
           </div>
-        ) : null}
-
-        {/* Loading */}
-
-        {loading ? (
+        ) : loading ? (
           <div className="mt-5 flex min-h-[300px] items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               در حال دریافت معاملات...
             </div>
           </div>
-        ) : null}
-
-        {/* Error */}
-
-        {!loading &&
-        error &&
-        activePortfolioId ? (
+        ) : error ? (
           <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center">
             <p className="font-medium text-destructive">
               دریافت معاملات انجام نشد
@@ -727,21 +651,17 @@ function TradesPage() {
               {error}
             </p>
 
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={handleRefresh}
-            >
-              تلاش مجدد
-            </Button>
+            {activePortfolioId ? (
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={handleRefresh}
+              >
+                تلاش مجدد
+              </Button>
+            ) : null}
           </div>
-        ) : null}
-
-        {/* Table */}
-
-        {!loading &&
-        !error &&
-        activePortfolioId ? (
+        ) : (
           <>
             <div className="mt-5 overflow-x-auto">
               <table className="w-full text-sm">
@@ -790,114 +710,114 @@ function TradesPage() {
                 </thead>
 
                 <tbody>
-                  {filtered.map((trade) => {
-                    const pnl = toNumber(
-                      trade.profit_loss,
-                    );
+                  {filtered.map(
+                    (trade) => {
+                      const pnl =
+                        toNumber(
+                          trade.profit_loss,
+                        );
 
-                    const isBuy =
-                      trade.transaction_type
-                        ?.toLowerCase() ===
-                      "buy";
+                      const isBuy =
+                        trade.transaction_type
+                          .toLowerCase() ===
+                        "buy";
 
-                    return (
-                      <tr
-                        key={String(
-                          trade.id,
-                        )}
-                        className="border-b border-border/50 hover:bg-secondary/30 last:border-0"
-                      >
-                        <td className="py-3 text-xs tabular text-muted-foreground">
-                          {trade.transaction_id ||
-                            trade.id}
-                        </td>
-
-                        <td className="py-3 font-medium">
-                          {trade.symbol}
-                        </td>
-
-                        <td className="py-3">
-                          <Badge
-                            variant="outline"
-                            className={
-                              isBuy
-                                ? "border-primary/40 bg-primary/10 text-primary"
-                                : "border-destructive/40 bg-destructive/10 text-destructive"
-                            }
-                          >
-                            {isBuy
-                              ? "خرید"
-                              : "فروش"}
-                          </Badge>
-                        </td>
-
-                        <td className="py-3 tabular">
-                          {formatPrice(
-                            trade.entry_price,
-                          )}
-                        </td>
-
-                        <td className="py-3 tabular">
-                          {formatPrice(
-                            trade.exit_price,
-                          )}
-                        </td>
-
-                        <td className="py-3 tabular">
-                          {formatNumber(
-                            trade.volume,
-                          )}
-                        </td>
-
-                        <td className="py-3 tabular">
-                          {formatNumber(
-                            trade.r_r,
-                          )}
-                        </td>
-
-                        <td
-                          className={`py-3 tabular font-medium ${
-                            pnl >= 0
-                              ? "gain"
-                              : "loss"
-                          }`}
+                      return (
+                        <tr
+                          key={trade.id}
+                          className="border-b border-border/50 hover:bg-secondary/30 last:border-0"
                         >
-                          {pnl >= 0
-                            ? "+"
-                            : ""}
+                          <td className="py-3 text-xs tabular text-muted-foreground">
+                            {trade.transaction_id ||
+                              trade.id}
+                          </td>
 
-                          {pnl.toLocaleString(
-                            "en-US",
-                            {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            },
-                          )}
+                          <td className="py-3 font-medium">
+                            {trade.symbol}
+                          </td>
 
-                          $
-                        </td>
+                          <td className="py-3">
+                            <Badge
+                              variant="outline"
+                              className={
+                                isBuy
+                                  ? "border-primary/40 bg-primary/10 text-primary"
+                                  : "border-destructive/40 bg-destructive/10 text-destructive"
+                              }
+                            >
+                              {isBuy
+                                ? "خرید"
+                                : "فروش"}
+                            </Badge>
+                          </td>
 
-                        <td className="py-3">
-                          {trade.followed_plan ? (
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-destructive" />
-                          )}
-                        </td>
+                          <td className="py-3 tabular">
+                            {formatPrice(
+                              trade.entry_price,
+                            )}
+                          </td>
 
-                        <td className="py-3 text-xs text-muted-foreground tabular">
-                          {formatDate(
-                            trade.closed_at ??
-                              trade.created_at,
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td className="py-3 tabular">
+                            {formatPrice(
+                              trade.exit_price,
+                            )}
+                          </td>
+
+                          <td className="py-3 tabular">
+                            {formatNumber(
+                              trade.volume,
+                            )}
+                          </td>
+
+                          <td className="py-3 tabular">
+                            {formatNumber(
+                              trade.r_r,
+                            )}
+                          </td>
+
+                          <td
+                            className={`py-3 tabular font-medium ${
+                              pnl >= 0
+                                ? "gain"
+                                : "loss"
+                            }`}
+                          >
+                            {pnl >= 0
+                              ? "+"
+                              : ""}
+                            {pnl.toLocaleString(
+                              "en-US",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
+                            $
+                          </td>
+
+                          <td className="py-3">
+                            {trade.followed_plan ? (
+                              <CheckCircle2 className="h-4 w-4 text-primary" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            )}
+                          </td>
+
+                          <td className="py-3 text-xs text-muted-foreground tabular">
+                            {formatDate(
+                              trade.closed_at ??
+                                trade.created_at,
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    },
+                  )}
                 </tbody>
               </table>
 
-              {filtered.length === 0 ? (
+              {filtered.length ===
+              0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
                   {trades.length === 0
                     ? "برای این پرتفولیو هنوز معامله‌ای ثبت نشده است."
@@ -906,9 +826,8 @@ function TradesPage() {
               ) : null}
             </div>
 
-            {/* Pagination */}
-
-            {pagination.count > 0 ? (
+            {pagination.count >
+            0 ? (
               <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-xs text-muted-foreground">
                   نمایش{" "}
@@ -941,8 +860,7 @@ function TradesPage() {
                     }
                     disabled={
                       loading ||
-                      !pagination.previous ||
-                      page <= 1
+                      !pagination.previous
                     }
                   >
                     <ChevronRight className="ml-1 h-4 w-4" />
@@ -972,8 +890,7 @@ function TradesPage() {
                     }
                     disabled={
                       loading ||
-                      !pagination.next ||
-                      page >= totalPages
+                      !pagination.next
                     }
                   >
                     بعدی
@@ -984,10 +901,11 @@ function TradesPage() {
             ) : null}
 
             <div className="mt-2 text-center text-[11px] text-muted-foreground">
-              فیلترهای جستجو روی معاملات همین صفحه اعمال می‌شوند.
+              فیلترهای جستجو روی معاملات همین صفحه
+              اعمال می‌شوند.
             </div>
           </>
-        ) : null}
+        )}
       </div>
     </AppShell>
   );

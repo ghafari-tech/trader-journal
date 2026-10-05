@@ -30,32 +30,27 @@ export const Route = createFileRoute("/app/journal")({
   const [newOpen, setNewOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
 
-useEffect(() => {
-  apiFetch<{ journals: any[] }>(
-    "/app/journal/",
-    {
-      method: "GET",
-    },
-    { auth: true },
-  )
-    .then((data) => {
-      const mappedJournals = data.journals.map((j: any) => ({
-        id: j.id,
-        date: j.created_at,
-        title: j.title,
-        tradeId: j.transaction,
-        emotion: j.feel,
-        mistakes: j.mistakes,
-        lesson: j.lesson_learned,
-        plan: j.followed_plan,
-      }));
+  useEffect(() => {
+    fetch("https://trade.piqgram.ir/app/journal/")
+      .then((res) => res.json())
+      .then((data) => {
+        const mappedJournals = data.journals.map((j: any) => ({
+          id: j.id,
+          date: j.created_at,
+          title: j.title,
+          tradeId: j.transaction,
+          emotion: j.feel,
+          mistakes: j.mistakes,
+          lesson: j.lesson_learned,
+          plan: j.followed_plan,
+        }));
 
-      setEntries(mappedJournals);
-    })
-    .catch((error) => {
-      console.error("Error fetching journals:", error);
-    });
-}, []);
+        setEntries(mappedJournals);
+      })
+      .catch((error) => {
+        console.error("Error fetching journals:", error);
+      });
+  }, []);
 
   const [query, setQuery] = useState("");
   const [planFilter, setPlanFilter] = useState<"all" | "yes" | "no">("all");
@@ -93,6 +88,15 @@ async function submit(e: React.FormEvent) {
     return;
   }
 
+  if (!nTrade.trim()) {
+    toast.error("شناسه معامله را وارد کنید");
+    return;
+  }
+
+  if (!nTrade.startsWith("T-")) {
+    toast.error("شناسه معامله باید با T- شروع شود");
+    return;
+  }
 
   const journalData = {
     title: nTitle.trim(),
@@ -116,7 +120,7 @@ async function submit(e: React.FormEvent) {
     toast.success("ژورنال با موفقیت ثبت شد");
 
     const data = await apiFetch<{ journals: any[] }>(
-      "/app/journal/",
+      "/journal/",
       {
         method: "GET",
       },
