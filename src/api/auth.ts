@@ -1,3 +1,4 @@
+
 import { apiFetch } from "@/api/client";
 import { setAuthTokens } from "@/lib/auth-storage";
 import {
@@ -37,8 +38,7 @@ function pickTokens(
 } {
   const root = (payload ?? {}) as AuthPayload;
 
-  const nested =
-    root.data ?? root;
+  const nested = root.data ?? root;
 
   const access =
     nested.access ??
@@ -72,11 +72,9 @@ function pickCurrentUser(
 ): CurrentUserInfo | null {
   const root = (payload ?? {}) as AuthPayload;
 
-  const data =
-    root.data ?? root;
+  const data = root.data ?? root;
 
-  const user =
-    data.user ?? data;
+  const user = data.user ?? data;
 
   const firstName =
     typeof user.first_name === "string"
@@ -105,10 +103,6 @@ export async function login(
   email: string,
   password: string,
 ) {
-  /*
-   * قبل از ورود، اطلاعات کاربر قبلی را پاک می‌کنیم
-   * تا اسم کاربر قبلی روی حساب جدید باقی نماند.
-   */
   clearCurrentUser();
 
   const payload =
@@ -134,10 +128,6 @@ export async function login(
     tokens.refresh,
   );
 
-  /*
-   * اگر API هنگام login اطلاعات نام کاربر
-   * را برگرداند، همان را ذخیره می‌کنیم.
-   */
   const currentUser =
     pickCurrentUser(payload);
 
@@ -150,6 +140,9 @@ export async function login(
 
 /**
  * ثبت‌نام
+ *
+ * این API حساب را ایجاد می‌کند
+ * و کد تأیید را به ایمیل کاربر می‌فرستد.
  */
 export async function signup(input: {
   first_name: string;
@@ -157,13 +150,13 @@ export async function signup(input: {
   email: string;
   password: string;
 }) {
-  /*
-   * اطلاعات کاربر قبلی را پاک می‌کنیم.
-   */
   clearCurrentUser();
 
   const payload =
-    await apiFetch<unknown>(
+    await apiFetch<{
+      message?: string;
+      email?: string;
+    }>(
       "/signup/",
       {
         method: "POST",
@@ -175,36 +168,42 @@ export async function signup(input: {
     );
 
   /*
-   * چون اطلاعات نام و نام خانوادگی
-   * را همین‌جا از فرم ثبت‌نام داریم،
-   * بلافاصله کاربر فعلی را ذخیره می‌کنیم.
+   * در این مرحله هنوز نباید کاربر را
+   * وارد حساب کنیم یا current user را ذخیره کنیم.
+   *
+   * چون API می‌گوید:
+   * Verification code sent successfully.
    */
-  setCurrentUser({
-    first_name:
-      input.first_name.trim(),
-    last_name:
-      input.last_name.trim(),
-  });
 
-  /*
-   * بعضی APIها بعد از signup توکن می‌دهند
-   * و بعضی‌ها نمی‌دهند.
-   */
-  try {
-    const tokens =
-      pickTokens(payload);
+  return payload;
+}
 
-    setAuthTokens(
-      tokens.access,
-      tokens.refresh,
+/**
+ * تأیید کد ثبت‌نام
+ *
+ * POST /verify/register/
+ */
+export async function verifyRegister(
+  email: string,
+  code: string,
+) {
+  const payload =
+    await apiFetch<{
+      message?: string;
+    }>(
+      "/verify/register/",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          code,
+        }),
+      },
+      {
+        auth: false,
+      },
     );
 
-    return tokens;
-  } catch {
-    /*
-     * اگر signup توکن نداد،
-     * مشکلی نیست؛ کاربر باید login کند.
-     */
-    return null;
-  }
+  return payload;
 }
+

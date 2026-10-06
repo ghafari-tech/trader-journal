@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as VerifyRegisterRouteImport } from './routes/verify-register'
 import { Route as AppAchievementsRouteImport } from './routes/app.achievements'
 import { Route as AppAdminRouteImport } from './routes/app.admin'
 import { Route as AppAiCoachRouteImport } from './routes/app.ai-coach'
@@ -50,6 +51,11 @@ const LoginRoute = LoginRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyRegisterRoute = VerifyRegisterRouteImport.update({
+  id: '/verify-register',
+  path: '/verify-register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppAchievementsRoute = AppAchievementsRouteImport.update({
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/verify-register': typeof VerifyRegisterRoute
   '/app/achievements': typeof AppAchievementsRoute
   '/app/admin': typeof AppAdminRoute
   '/app/ai-coach': typeof AppAiCoachRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/verify-register': typeof VerifyRegisterRoute
   '/app/achievements': typeof AppAchievementsRoute
   '/app/admin': typeof AppAdminRoute
   '/app/ai-coach': typeof AppAiCoachRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/verify-register': typeof VerifyRegisterRoute
   '/app/achievements': typeof AppAchievementsRoute
   '/app/admin': typeof AppAdminRoute
   '/app/ai-coach': typeof AppAiCoachRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/signup'
+    | '/verify-register'
     | '/app/achievements'
     | '/app/admin'
     | '/app/ai-coach'
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/signup'
+    | '/verify-register'
     | '/app/achievements'
     | '/app/admin'
     | '/app/ai-coach'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/login'
     | '/signup'
+    | '/verify-register'
     | '/app/achievements'
     | '/app/admin'
     | '/app/ai-coach'
@@ -237,6 +249,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  VerifyRegisterRoute: typeof VerifyRegisterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -274,6 +287,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-register': {
+      id: '/verify-register'
+      path: '/verify-register'
+      fullPath: '/verify-register'
+      preLoaderRoute: typeof VerifyRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/achievements': {
@@ -411,6 +431,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  VerifyRegisterRoute: VerifyRegisterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
