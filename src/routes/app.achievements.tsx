@@ -53,7 +53,7 @@ function AchievementsPage() {
   }, [loadAchievements]);
 
   const earned = achievements.filter(
-    (achievement) => achievement.is_acquisition,
+    (achievement) => achievement.is_finished,
   ).length;
 
   return (
@@ -114,12 +114,12 @@ function AchievementsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {achievements.map((achievement, index) => {
-            const earned = achievement.is_acquisition;
+          {achievements.map((achievement) => {
+            const earned = achievement.is_finished;
 
             return (
               <div
-                key={`${achievement.name}-${index}`}
+                key={achievement.id}
                 className={`card-surface p-6 text-center transition-all ${
                   earned
                     ? "hover:border-primary/40"
