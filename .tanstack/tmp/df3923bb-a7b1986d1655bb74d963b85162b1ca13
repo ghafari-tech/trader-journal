@@ -1,0 +1,343 @@
+import { useState, useEffect } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { 
+  Check, 
+  Copy, 
+  Download, 
+  Terminal, 
+  AlertCircle, 
+  RefreshCw, 
+  ShieldCheck, 
+  CreditCard, 
+  Calendar, 
+  Zap 
+} from "lucide-react";
+import { AppShell } from "@/components/layout/AppShell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  getMetaTraderStatus, 
+  downloadExpertAdvisor, 
+  getUserProfile, 
+  renewSubscription,
+  type MetaTraderStatus, 
+  type UserProfile 
+} from "@/lib/api";
+
+function MetaTraderSettings() {
+  const [status, setStatus] = useState<MetaTraderStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const fetchStatus = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getMetaTraderStatus();
+      setStatus(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "خطا در دریافت وضعیت متاتریدر");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const handleCopyKey = () => {
+    if (status?.api_key) {
+      navigator.clipboard.writeText(status.api_key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadEA = async () => {
+    try {
+      setDownloading(true);
+      const blob = await downloadExpertAdvisor();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "TraderJournal.ex5";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert("خطا در دانلود اکسپرت: " + (err instanceof Error ? err.message : "خطای ناشناخته"));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>خطا</AlertTitle>
+        <AlertDescription className="flex items-center justify-between">
+          <span>{error}</span>
+          <Button variant="outline" size="sm" onClick={fetchStatus}>
+            تلاش مجدد
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      {/* کارت اصلی وضعیت اتصال */}
+      <div className="card-surface p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">اتصال به متاتریدر ۵</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              تنظیمات مربوط به اتصال اکسپرت متاتریدر به حساب کاربری
+            </p>
+          </div>
+          <Badge variant={status?.is_connected ? "default" : "secondary"}>
+            {status?.is_connected ? "متصل" : "غیرمتصل"}
+          </Badge>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <Label>کلید اختصاصی API (API Key)</Label>
+            <div className="flex gap-2 mt-1.5">
+              <Input
+                value={status?.api_key || ""}
+                readOnly
+                type="password"
+                className="font-mono dir-ltr"
+              />
+              <Button variant="outline" onClick={handleCopyKey}>
+                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              این کلید را در تنظیمات اکسپرت متاتریدر وارد کنید. آن را در اختیار دیگران قرار ندهید.
+            </p>
+          </div>
+
+          <div>
+            <Button onClick={handleDownloadEA} disabled={downloading} className="gap-2">
+              <Download className="h-4 w-4" />
+              {downloading ? "در حال دانلود..." : "دانلود اکسپرت (TraderJournal.ex5)"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* آخرین همگام‌سازی */}
+      {status?.last_sync_at && (
+        <div className="card-surface p-4 flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">آخرین همگام‌سازی:</span>
+          <span className="font-medium">
+            {new Date(status.last_sync_at).toLocaleString("fa-IR")}
+          </span>
+        </div>
+      )}
+
+      {/* راهنمای متاتریدر */}
+      <div className="card-surface p-6 space-y-4">
+        <h4 className="font-semibold flex items-center gap-2">
+          <Terminal className="h-4 w-4 text-primary" />
+          راهنمای راه‌اندازی در متاتریدر ۵
+        </h4>
+
+        <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+          <li>فایل اکسپرت را دانلود کنید.</li>
+          <li>در متاتریدر ۵ از مسیر File &gt; Open Data Folder وارد پوشه MQL5/Experts شوید.</li>
+          <li>فایل TraderJournal.ex5 را در این پوشه قرار دهید.</li>
+          <li>در متاتریدر از مسیر Tools &gt; Options &gt; Expert Advisors گزینه Allow WebRequest را فعال کنید.</li>
+          <li>آدرس سرور را به لیست URLهای مجاز اضافه کنید.</li>
+          <li>اکسپرت را روی یکی از چارت‌ها بکشید و رها کنید.</li>
+          <li>در تب Inputs، کلید API بالا را وارد کنید.</li>
+        </ol>
+      </div>
+    </div>
+  );
+}export const Route = createFileRoute("/app/settings")({
+  component: SettingsPage,
+});
+
+export function SettingsPage() {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [renewing, setRenewing] = useState(false);
+  const [renewMessage, setRenewMessage] = useState<string | null>(null);
+
+  const fetchUser = async () => {
+    try {
+      setLoading(true);
+      const data = await getUserProfile();
+      setUser(data);
+    } catch (err) {
+      console.error("خطا در دریافت اطلاعات کاربر:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUser();
+  }, []);
+
+  const handleRenew = async (planType: string) => {
+    try {
+      setRenewing(true);
+      setRenewMessage(null);
+      await renewSubscription({ plan: planType });
+      setRenewMessage("اشتراک شما با موفقیت تمدید شد!");
+      await fetchUser();
+    } catch (err) {
+      setRenewMessage(err instanceof Error ? err.message : "خطا در تمدید اشتراک");
+    } finally {
+      setRenewing(false);
+    }
+  };
+
+  return (
+    <AppShell title="تنظیمات">
+      <Tabs defaultValue="subscription" className="w-full" dir="rtl">
+        <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
+          <TabsTrigger value="profile">پروفایل</TabsTrigger>
+          <TabsTrigger value="subscription">اشتراک</TabsTrigger>
+          <TabsTrigger value="mt">متاتریدر</TabsTrigger>
+        </TabsList>
+
+        {/* تب پروفایل */}
+        <TabsContent value="profile" className="mt-6">
+          <div className="card-surface p-6 space-y-4">
+            <h3 className="text-lg font-semibold">اطلاعات کاربری</h3>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">در حال بارگذاری...</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>نام</Label>
+                  <Input value={user?.first_name ?? ""} readOnly className="bg-secondary/60" />
+                </div>
+                <div className="space-y-2">
+                  <Label>نام خانوادگی</Label>
+                  <Input value={user?.last_name ?? ""} readOnly className="bg-secondary/60" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>ایمیل</Label>
+                  <Input value={user?.email ?? ""} readOnly className="bg-secondary/60 dir-ltr text-right" />
+                </div>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* تب تمدید اشتراک */}
+        <TabsContent value="subscription" className="mt-6">
+          <div className="card-surface p-6 space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-primary" />
+                  مدیریت و تمدید اشتراک
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  مشاهده وضعیت فعلی و تمدید یا ارتقای پلن کاربری
+                </p>
+              </div>
+              <Badge variant={user?.subscription_active ? "default" : "destructive"}>
+                {user?.subscription_active ? "فعال" : "منقضی شده"}
+              </Badge>
+            </div>
+
+            {renewMessage && (
+              <Alert variant={renewMessage.includes("موفقیت") ? "default" : "destructive"}>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{renewMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-secondary/30 p-4 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Calendar className="h-8 w-8 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">تاریخ پایان اشتراک</p>
+                  <p className="text-sm font-medium">
+                    {user?.subscription_expires_at 
+                      ? new Date(user.subscription_expires_at).toLocaleDateString("fa-IR")
+                      : "نامشخص"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Zap className="h-8 w-8 text-amber-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">پلن فعلی</p>
+                  <p className="text-sm font-medium">{user?.plan_name ?? "رایگان"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-2">
+              <h4 className="text-sm font-semibold">انتخاب پلن جهت تمدید:</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border rounded-xl p-4 space-y-3 hover:border-primary transition-colors">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold">پلن ۱ ماهه</span>
+                    <span className="text-sm text-muted-foreground">ماهانه</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">دسترسی کامل به تمام امکانات هوش مصنوعی و ثبت معاملات</p>
+                  <Button 
+                    className="w-full" 
+                    disabled={renewing} 
+                    onClick={() => handleRenew("monthly")}
+                  >
+                    {renewing ? "در حال پردازش..." : "تمدید ۱ ماهه"}
+                  </Button>
+                </div>
+
+                <div className="border rounded-xl p-4 space-y-3 hover:border-primary transition-colors bg-primary/5">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold">پلن سالانه</span>
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary">تخفیف ویژه</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">۱۲ ماه دسترسی کامل با تخفیف ویژه</p>
+                  <Button 
+                    className="w-full" 
+                    disabled={renewing} 
+                    onClick={() => handleRenew("yearly")}
+                  >
+                    {renewing ? "در حال پردازش..." : "تمدید ۱ ساله"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* تب متاتریدر */}
+        <TabsContent value="mt" className="mt-6">
+          <MetaTraderSettings />
+        </TabsContent>
+      </Tabs>
+    </AppShell>
+  );
+}
