@@ -25,6 +25,7 @@ import {
   Activity,
   Award,
   Loader2,
+  BarChart3,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -46,32 +47,32 @@ export const Route = createFileRoute("/app/dashboard")({
 type SummaryTransaction = {
   symbol: string;
   transaction_type: "buy" | "sell" | string;
-  volume: string;
-  r_r: string;
-  total_reward: number;
-  created_at: string;
+  volume: string | number | null;
+  r_r: string | number | null;
+  total_reward: number | null;
+  created_at: string | null;
 };
 
 type BestWorstTransaction = {
-  symbol: string;
-  total_reward: number;
-  r_r: string;
-  created_at: string;
+  symbol: string | null;
+  total_reward: number | null;
+  r_r: string | number | null;
+  created_at: string | null;
 };
 
 type SummaryResponse = {
-  total_reward: number;
-  total_profit: number;
-  total_loss: number;
-  total_trades: number;
-  winning_trades: number;
-  losing_trades: number;
-  win_rate: number;
-  profit_factor: number;
-  max_drawdown: number;
-  best_transaction: BestWorstTransaction;
-  worst_transaction: BestWorstTransaction;
-  transactions: SummaryTransaction[];
+  total_reward: number | null;
+  total_profit: number | null;
+  total_loss: number | null;
+  total_trades: number | null;
+  winning_trades: number | null;
+  losing_trades: number | null;
+  win_rate: number | null;
+  profit_factor: number | null;
+  max_drawdown: number | null;
+  best_transaction: BestWorstTransaction | null;
+  worst_transaction: BestWorstTransaction | null;
+  transactions: SummaryTransaction[] | null;
 };
 
 /* =========================
@@ -80,14 +81,14 @@ type SummaryResponse = {
 
 type EquityItem = {
   date: string;
-  equity: number;
+  equity: number | null;
 };
 
 type EquityResponse = {
-  start_date: string;
-  end_date: string;
-  data: EquityItem[];
-};
+  start_date?: string | null;
+  end_date?: string | null;
+  data?: EquityItem[] | null;
+} | EquityItem[];
 
 /* =========================
    Drawdown
@@ -95,7 +96,7 @@ type EquityResponse = {
 
 type DrawdownItem = {
   date: string;
-  dd: number;
+  dd: number | null;
 };
 
 /* =========================
@@ -105,14 +106,14 @@ type DrawdownItem = {
 type MonthlyItem = {
   month: string;
   month_number: number;
-  profit: number;
-  loss: number;
-  net: number;
+  profit: number | null;
+  loss: number | null;
+  net: number | null;
 };
 
 type MonthlyResponse = {
-  year: number;
-  months: MonthlyItem[];
+  year: number | null;
+  months: MonthlyItem[] | null;
 };
 
 /* =========================
@@ -120,30 +121,246 @@ type MonthlyResponse = {
 ========================= */
 
 type WinLossResponse = {
-  total_trades: number;
-  winning_trades: number;
-  losing_trades: number;
-  break_even_trades: number;
-  win_rate: number;
-  loss_rate: number;
+  total_trades: number | null;
+  winning_trades: number | null;
+  losing_trades: number | null;
+  break_even_trades: number | null;
+  win_rate: number | null;
+  loss_rate: number | null;
 };
 
 /* =========================
-   Helpers
+   Safe Helpers
+========================= */
+
+function toSafeNumber(
+  value: unknown,
+  fallback = 0,
+): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : fallback;
+  }
+
+  return fallback;
+}
+
+function toSafeString(
+  value: unknown,
+  fallback = "—",
+): string {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return fallback;
+  }
+
+  return String(value);
+}
+
+function normalizeSummary(
+  value: SummaryResponse | null | undefined,
+): SummaryResponse {
+  const source = value ?? ({} as SummaryResponse);
+
+  return {
+    total_reward: toSafeNumber(
+      source.total_reward,
+    ),
+
+    total_profit: toSafeNumber(
+      source.total_profit,
+    ),
+
+    total_loss: toSafeNumber(
+      source.total_loss,
+    ),
+
+    total_trades: toSafeNumber(
+      source.total_trades,
+    ),
+
+    winning_trades: toSafeNumber(
+      source.winning_trades,
+    ),
+
+    losing_trades: toSafeNumber(
+      source.losing_trades,
+    ),
+
+    win_rate: toSafeNumber(
+      source.win_rate,
+    ),
+
+    profit_factor: toSafeNumber(
+      source.profit_factor,
+    ),
+
+    max_drawdown: toSafeNumber(
+      source.max_drawdown,
+    ),
+
+    best_transaction:
+      source.best_transaction ?? null,
+
+    worst_transaction:
+      source.worst_transaction ?? null,
+
+    transactions: Array.isArray(
+      source.transactions,
+    )
+      ? source.transactions
+      : [],
+  };
+}
+
+function normalizeEquity(
+  value: EquityResponse | null | undefined,
+): EquityItem[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => ({
+      date: toSafeString(item?.date, ""),
+      equity: toSafeNumber(item?.equity),
+    }));
+  }
+
+  if (
+    value &&
+    Array.isArray(value.data)
+  ) {
+    return value.data.map((item) => ({
+      date: toSafeString(item?.date, ""),
+      equity: toSafeNumber(item?.equity),
+    }));
+  }
+
+  return [];
+}
+
+function normalizeDrawdown(
+  value: DrawdownItem[] | null | undefined,
+): DrawdownItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => ({
+    date: toSafeString(item?.date, ""),
+    dd: toSafeNumber(item?.dd),
+  }));
+}
+
+function normalizeMonthly(
+  value: MonthlyResponse | null | undefined,
+): MonthlyResponse {
+  if (!value) {
+    return {
+      year: null,
+      months: [],
+    };
+  }
+
+  return {
+    year:
+      value.year === null ||
+      value.year === undefined
+        ? null
+        : toSafeNumber(value.year),
+
+    months: Array.isArray(value.months)
+      ? value.months.map((item) => ({
+          month: toSafeString(
+            item?.month,
+            "",
+          ),
+
+          month_number: toSafeNumber(
+            item?.month_number,
+          ),
+
+          profit: toSafeNumber(
+            item?.profit,
+          ),
+
+          loss: toSafeNumber(
+            item?.loss,
+          ),
+
+          net: toSafeNumber(item?.net),
+        }))
+      : [],
+  };
+}
+
+function normalizeWinLoss(
+  value: WinLossResponse | null | undefined,
+): WinLossResponse {
+  return {
+    total_trades: toSafeNumber(
+      value?.total_trades,
+    ),
+
+    winning_trades: toSafeNumber(
+      value?.winning_trades,
+    ),
+
+    losing_trades: toSafeNumber(
+      value?.losing_trades,
+    ),
+
+    break_even_trades: toSafeNumber(
+      value?.break_even_trades,
+    ),
+
+    win_rate: toSafeNumber(
+      value?.win_rate,
+    ),
+
+    loss_rate: toSafeNumber(
+      value?.loss_rate,
+    ),
+  };
+}
+
+/* =========================
+   Formatters
 ========================= */
 
 function formatMoney(value: number) {
-  return `$${Math.abs(value).toLocaleString("en-US", {
+  const safeValue = toSafeNumber(value);
+
+  return `$${Math.abs(
+    safeValue,
+  ).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
 function formatSignedMoney(value: number) {
-  return `${value >= 0 ? "+" : "-"}${formatMoney(value)}`;
+  const safeValue = toSafeNumber(value);
+
+  if (safeValue === 0) {
+    return "$0.00";
+  }
+
+  return `${
+    safeValue >= 0 ? "+" : "-"
+  }${formatMoney(safeValue)}`;
 }
 
-function formatDate(date: string) {
+function formatDate(
+  date: string | null | undefined,
+) {
   if (!date) return "—";
 
   const d = new Date(date);
@@ -152,14 +369,19 @@ function formatDate(date: string) {
     return date;
   }
 
-  return new Intl.DateTimeFormat("fa-IR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
+  return new Intl.DateTimeFormat(
+    "fa-IR",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    },
+  ).format(d);
 }
 
-function formatChartDate(date: string) {
+function formatChartDate(
+  date: string | null | undefined,
+) {
   if (!date) return "";
 
   const d = new Date(date);
@@ -168,11 +390,47 @@ function formatChartDate(date: string) {
     return date;
   }
 
-  return new Intl.DateTimeFormat("fa-IR", {
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
+  return new Intl.DateTimeFormat(
+    "fa-IR",
+    {
+      month: "2-digit",
+      day: "2-digit",
+    },
+  ).format(d);
 }
+
+/* =========================
+   Empty Dashboard Data
+========================= */
+
+const EMPTY_SUMMARY: SummaryResponse = {
+  total_reward: 0,
+  total_profit: 0,
+  total_loss: 0,
+  total_trades: 0,
+  winning_trades: 0,
+  losing_trades: 0,
+  win_rate: 0,
+  profit_factor: 0,
+  max_drawdown: 0,
+  best_transaction: null,
+  worst_transaction: null,
+  transactions: [],
+};
+
+const EMPTY_WIN_LOSS: WinLossResponse = {
+  total_trades: 0,
+  winning_trades: 0,
+  losing_trades: 0,
+  break_even_trades: 0,
+  win_rate: 0,
+  loss_rate: 0,
+};
+
+const EMPTY_MONTHLY: MonthlyResponse = {
+  year: null,
+  months: [],
+};
 
 /* =========================
    Dashboard
@@ -180,7 +438,9 @@ function formatChartDate(date: string) {
 
 function DashboardPage() {
   const [summary, setSummary] =
-    useState<SummaryResponse | null>(null);
+    useState<SummaryResponse | null>(
+      null,
+    );
 
   const [equity, setEquity] =
     useState<EquityItem[]>([]);
@@ -189,10 +449,14 @@ function DashboardPage() {
     useState<DrawdownItem[]>([]);
 
   const [monthly, setMonthly] =
-    useState<MonthlyResponse | null>(null);
+    useState<MonthlyResponse | null>(
+      null,
+    );
 
   const [winLoss, setWinLoss] =
-    useState<WinLossResponse | null>(null);
+    useState<WinLossResponse | null>(
+      null,
+    );
 
   const [loading, setLoading] =
     useState(true);
@@ -205,13 +469,25 @@ function DashboardPage() {
       setLoading(true);
       setError("");
 
+      /*
+       * هر API به صورت جداگانه درخواست می‌شود.
+       *
+       * دلیل:
+       * اگر کاربر Portfolio داشته باشد ولی هنوز
+       * هیچ معامله‌ای نداشته باشد، ممکن است بعضی
+       * endpointهای داشبورد از Backend خطا یا
+       * response خالی برگردانند.
+       *
+       * در این حالت نباید کل Dashboard خراب شود.
+       */
+
       const [
-        summaryResponse,
-        equityResponse,
-        drawdownResponse,
-        monthlyResponse,
-        winLossResponse,
-      ] = await Promise.all([
+        summaryResult,
+        equityResult,
+        drawdownResult,
+        monthlyResult,
+        winLossResult,
+      ] = await Promise.allSettled([
         apiFetch<SummaryResponse>(
           "/app/dashboard/summery/",
           {
@@ -263,17 +539,133 @@ function DashboardPage() {
         ),
       ]);
 
-      setSummary(summaryResponse);
+      /* =========================
+         Summary
+      ========================= */
 
-      // API واقعی Equity دارای data است
-      setEquity(equityResponse.data);
+      if (
+        summaryResult.status ===
+        "fulfilled"
+      ) {
+        setSummary(
+          normalizeSummary(
+            summaryResult.value,
+          ),
+        );
+      } else {
+        console.warn(
+          "Dashboard summary API error:",
+          summaryResult.reason,
+        );
 
-      setDrawdown(drawdownResponse);
-      setMonthly(monthlyResponse);
-      setWinLoss(winLossResponse);
+        /*
+         * حتی اگر Summary API برای
+         * Portfolio بدون معامله خطا بدهد،
+         * Dashboard را با داده صفر نمایش می‌دهیم.
+         */
+        setSummary(EMPTY_SUMMARY);
+      }
+
+      /* =========================
+         Equity
+      ========================= */
+
+      if (
+        equityResult.status ===
+        "fulfilled"
+      ) {
+        setEquity(
+          normalizeEquity(
+            equityResult.value,
+          ),
+        );
+      } else {
+        console.warn(
+          "Dashboard equity API error:",
+          equityResult.reason,
+        );
+
+        setEquity([]);
+      }
+
+      /* =========================
+         Drawdown
+      ========================= */
+
+      if (
+        drawdownResult.status ===
+        "fulfilled"
+      ) {
+        setDrawdown(
+          normalizeDrawdown(
+            drawdownResult.value,
+          ),
+        );
+      } else {
+        console.warn(
+          "Dashboard drawdown API error:",
+          drawdownResult.reason,
+        );
+
+        setDrawdown([]);
+      }
+
+      /* =========================
+         Monthly
+      ========================= */
+
+      if (
+        monthlyResult.status ===
+        "fulfilled"
+      ) {
+        setMonthly(
+          normalizeMonthly(
+            monthlyResult.value,
+          ),
+        );
+      } else {
+        console.warn(
+          "Dashboard monthly API error:",
+          monthlyResult.reason,
+        );
+
+        setMonthly(
+          EMPTY_MONTHLY,
+        );
+      }
+
+      /* =========================
+         Win / Loss
+      ========================= */
+
+      if (
+        winLossResult.status ===
+        "fulfilled"
+      ) {
+        setWinLoss(
+          normalizeWinLoss(
+            winLossResult.value,
+          ),
+        );
+      } else {
+        console.warn(
+          "Dashboard win/loss API error:",
+          winLossResult.reason,
+        );
+
+        setWinLoss(
+          EMPTY_WIN_LOSS,
+        );
+      }
     } catch (err) {
+      /*
+       * این catch فقط برای خطاهای غیرمنتظره است.
+       * خطاهای endpointهای Dashboard در بالا
+       * به صورت جداگانه مدیریت شده‌اند.
+       */
+
       console.error(
-        "Dashboard API error:",
+        "Dashboard unexpected error:",
         err,
       );
 
@@ -313,7 +705,7 @@ function DashboardPage() {
   }
 
   /* =========================
-     Error
+     Unexpected Error
   ========================= */
 
   if (error) {
@@ -338,47 +730,92 @@ function DashboardPage() {
     );
   }
 
-  if (!summary) {
-    return null;
-  }
+  /*
+   * در این مرحله همیشه Summary داریم؛
+   * حتی اگر Backend برای Portfolio بدون
+   * معامله اطلاعاتی برنگرداند.
+   */
+  const safeSummary =
+    summary ?? EMPTY_SUMMARY;
+
+  const safeWinLoss =
+    winLoss ?? EMPTY_WIN_LOSS;
+
+  const safeMonthly =
+    monthly ?? EMPTY_MONTHLY;
 
   /* =========================
      Chart Data
   ========================= */
 
-  const equityChartData = equity.map(
-    (item) => ({
+  const equityChartData =
+    equity.map((item) => ({
       ...item,
-      day: formatChartDate(item.date),
-    }),
-  );
+      day: formatChartDate(
+        item.date,
+      ),
+    }));
 
   const drawdownChartData =
     drawdown.map((item) => ({
       ...item,
-      day: formatChartDate(item.date),
+      day: formatChartDate(
+        item.date,
+      ),
     }));
 
   const monthlyChartData =
-    monthly?.months.map((item) => ({
-      ...item,
-      pnl: item.net,
-    })) ?? [];
+    (safeMonthly.months ?? []).map(
+      (item) => ({
+        ...item,
+        pnl: toSafeNumber(
+          item.net,
+        ),
+      }),
+    );
+
+  const winningTrades =
+    toSafeNumber(
+      safeWinLoss.winning_trades,
+    );
+
+  const losingTrades =
+    toSafeNumber(
+      safeWinLoss.losing_trades,
+    );
+
+  const totalTrades =
+    toSafeNumber(
+      safeWinLoss.total_trades,
+      toSafeNumber(
+        safeSummary.total_trades,
+      ),
+    );
+
+  const winRate =
+    toSafeNumber(
+      safeWinLoss.win_rate,
+      toSafeNumber(
+        safeSummary.win_rate,
+      ),
+    );
+
+  const lossRate =
+    toSafeNumber(
+      safeWinLoss.loss_rate,
+      Math.max(0, 100 - winRate),
+    );
 
   const pieData = [
     {
       name: "برنده",
-      value:
-        winLoss?.winning_trades ??
-        summary.winning_trades,
+      value: winningTrades,
       color:
         "oklch(0.75 0.17 155)",
     },
     {
       name: "بازنده",
-      value:
-        winLoss?.losing_trades ??
-        summary.losing_trades,
+      value: losingTrades,
       color:
         "oklch(0.65 0.23 25)",
     },
@@ -388,29 +825,45 @@ function DashboardPage() {
      Stats
   ========================= */
 
+  const totalReward =
+    toSafeNumber(
+      safeSummary.total_reward,
+    );
+
+  const profitFactor =
+    toSafeNumber(
+      safeSummary.profit_factor,
+    );
+
+  const maxDrawdown =
+    toSafeNumber(
+      safeSummary.max_drawdown,
+    );
+
   const stats = [
     {
       label: "سود کل",
-      value: formatSignedMoney(
-        summary.total_reward,
-      ),
+      value:
+        formatSignedMoney(
+          totalReward,
+        ),
       change: `سود خالص: ${formatSignedMoney(
-        summary.total_reward,
+        totalReward,
       )}`,
       positive:
-        summary.total_reward >= 0,
+        totalReward >= 0,
       icon: DollarSign,
     },
 
     {
       label: "نرخ برد",
-      value: `${summary.win_rate.toLocaleString(
+      value: `${winRate.toLocaleString(
         "fa-IR",
         {
           maximumFractionDigits: 2,
         },
       )}٪`,
-      change: `${summary.winning_trades.toLocaleString(
+      change: `${winningTrades.toLocaleString(
         "fa-IR",
       )} معامله برنده`,
       positive: true,
@@ -420,25 +873,27 @@ function DashboardPage() {
     {
       label: "Profit Factor",
       value:
-        summary.profit_factor.toLocaleString(
+        profitFactor.toLocaleString(
           "fa-IR",
           {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           },
         ),
-      change: `${summary.total_trades.toLocaleString(
+      change: `${toSafeNumber(
+        safeSummary.total_trades,
+      ).toLocaleString(
         "fa-IR",
       )} معامله`,
       positive:
-        summary.profit_factor >= 1,
+        profitFactor >= 1,
       icon: TrendingUp,
     },
 
     {
       label: "Max Drawdown",
       value: `-${formatMoney(
-        summary.max_drawdown,
+        maxDrawdown,
       )}`,
       change: "حداکثر افت سرمایه",
       positive: false,
@@ -446,11 +901,50 @@ function DashboardPage() {
     },
   ];
 
+  const transactions =
+    Array.isArray(
+      safeSummary.transactions,
+    )
+      ? safeSummary.transactions
+      : [];
+
+  const bestTransaction =
+    safeSummary.best_transaction;
+
+  const worstTransaction =
+    safeSummary.worst_transaction;
+
   return (
     <AppShell
       title="داشبورد"
       subtitle="خلاصه عملکرد و آمار کلی حساب شما"
     >
+      {/* =========================
+          Empty Portfolio / Trades Info
+      ========================= */}
+
+      {toSafeNumber(
+        safeSummary.total_trades,
+      ) === 0 && (
+        <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <BarChart3 className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h3 className="font-semibold">
+                هنوز معامله‌ای ثبت نشده است
+              </h3>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                پرتفلیوی شما فعال است. با ثبت اولین معامله، آمار و نمودارهای عملکرد در این صفحه نمایش داده می‌شوند.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =========================
           KPI Cards
       ========================= */}
@@ -529,8 +1023,16 @@ function DashboardPage() {
           <div className="mt-4 h-72">
             {equityChartData.length ===
             0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                اطلاعات Equity موجود نیست
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                <Activity className="h-8 w-8 opacity-40" />
+
+                <span>
+                  هنوز اطلاعات Equity موجود نیست
+                </span>
+
+                <span className="text-xs">
+                  پس از ثبت معامله، نمودار عملکرد نمایش داده می‌شود.
+                </span>
               </div>
             ) : (
               <ResponsiveContainer>
@@ -590,7 +1092,6 @@ function DashboardPage() {
                     }}
                   />
 
-                  {/* فقط Equity چون API واقعی balance ندارد */}
                   <Area
                     type="monotone"
                     dataKey="equity"
@@ -614,44 +1115,59 @@ function DashboardPage() {
           </h3>
 
           <p className="text-xs text-muted-foreground">
-            {(
-              winLoss?.total_trades ??
-              summary.total_trades
-            ).toLocaleString("fa-IR")}{" "}
+            {totalTrades.toLocaleString(
+              "fa-IR",
+            )}{" "}
             معامله
           </p>
 
           <div className="mt-4 h-56">
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  innerRadius={55}
-                  outerRadius={80}
-                  paddingAngle={4}
-                >
-                  {pieData.map(
-                    (entry, index) => (
-                      <Cell
-                        key={index}
-                        fill={entry.color}
-                      />
-                    ),
-                  )}
-                </Pie>
+            {winningTrades === 0 &&
+            losingTrades === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                <Percent className="h-8 w-8 opacity-40" />
 
-                <Tooltip
-                  contentStyle={{
-                    background:
-                      "oklch(0.185 0.022 255)",
-                    border:
-                      "1px solid oklch(0.28 0.02 255)",
-                    borderRadius: 8,
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+                <span>
+                  هنوز آماری برای نمایش وجود ندارد
+                </span>
+              </div>
+            ) : (
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    innerRadius={55}
+                    outerRadius={80}
+                    paddingAngle={4}
+                  >
+                    {pieData.map(
+                      (
+                        entry,
+                        index,
+                      ) => (
+                        <Cell
+                          key={index}
+                          fill={
+                            entry.color
+                          }
+                        />
+                      ),
+                    )}
+                  </Pie>
+
+                  <Tooltip
+                    contentStyle={{
+                      background:
+                        "oklch(0.185 0.022 255)",
+                      border:
+                        "1px solid oklch(0.28 0.02 255)",
+                      borderRadius: 8,
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -661,20 +1177,19 @@ function DashboardPage() {
               </div>
 
               <div className="text-lg font-bold gain tabular">
-                {(
-                  winLoss?.win_rate ??
-                  summary.win_rate
-                ).toLocaleString("fa-IR", {
-                  maximumFractionDigits: 2,
-                })}
+                {winRate.toLocaleString(
+                  "fa-IR",
+                  {
+                    maximumFractionDigits: 2,
+                  },
+                )}
                 ٪
               </div>
 
               <div className="text-xs text-muted-foreground">
-                {(
-                  winLoss?.winning_trades ??
-                  summary.winning_trades
-                ).toLocaleString("fa-IR")}{" "}
+                {winningTrades.toLocaleString(
+                  "fa-IR",
+                )}{" "}
                 معامله
               </div>
             </div>
@@ -685,20 +1200,19 @@ function DashboardPage() {
               </div>
 
               <div className="text-lg font-bold loss tabular">
-                {(
-                  winLoss?.loss_rate ??
-                  100 - summary.win_rate
-                ).toLocaleString("fa-IR", {
-                  maximumFractionDigits: 2,
-                })}
+                {lossRate.toLocaleString(
+                  "fa-IR",
+                  {
+                    maximumFractionDigits: 2,
+                  },
+                )}
                 ٪
               </div>
 
               <div className="text-xs text-muted-foreground">
-                {(
-                  winLoss?.losing_trades ??
-                  summary.losing_trades
-                ).toLocaleString("fa-IR")}{" "}
+                {losingTrades.toLocaleString(
+                  "fa-IR",
+                )}{" "}
                 معامله
               </div>
             </div>
@@ -719,15 +1233,21 @@ function DashboardPage() {
           </h3>
 
           <p className="text-xs text-muted-foreground">
-            سود / زیان به دلار — سال{" "}
-            {monthly?.year ?? 1405}
+            سود / زیان به دلار
+            {safeMonthly.year
+              ? ` — سال ${safeMonthly.year}`
+              : ""}
           </p>
 
           <div className="mt-4 h-64">
             {monthlyChartData.length ===
             0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                اطلاعات عملکرد ماهانه موجود نیست
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                <BarChart3 className="h-8 w-8 opacity-40" />
+
+                <span>
+                  اطلاعات عملکرد ماهانه موجود نیست
+                </span>
               </div>
             ) : (
               <ResponsiveContainer>
@@ -767,14 +1287,23 @@ function DashboardPage() {
 
                   <Bar
                     dataKey="pnl"
-                    radius={[6, 6, 0, 0]}
+                    radius={[
+                      6,
+                      6,
+                      0,
+                      0,
+                    ]}
                   >
                     {monthlyChartData.map(
-                      (entry, index) => (
+                      (
+                        entry,
+                        index,
+                      ) => (
                         <Cell
                           key={index}
                           fill={
-                            entry.pnl >= 0
+                            entry.pnl >=
+                            0
                               ? "oklch(0.75 0.17 155)"
                               : "oklch(0.65 0.23 25)"
                           }
@@ -802,8 +1331,12 @@ function DashboardPage() {
           <div className="mt-4 h-64">
             {drawdownChartData.length ===
             0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                اطلاعات Drawdown موجود نیست
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                <TrendingDown className="h-8 w-8 opacity-40" />
+
+                <span>
+                  هنوز اطلاعات Drawdown موجود نیست
+                </span>
               </div>
             ) : (
               <ResponsiveContainer>
@@ -867,7 +1400,9 @@ function DashboardPage() {
             </h3>
 
             <Badge variant="outline">
-              {summary.total_trades.toLocaleString(
+              {toSafeNumber(
+                safeSummary.total_trades,
+              ).toLocaleString(
                 "fa-IR",
               )}{" "}
               معامله
@@ -875,100 +1410,137 @@ function DashboardPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="py-2 text-right font-medium">
-                    نماد
-                  </th>
+            {transactions.length ===
+            0 ? (
+              <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                <Activity className="h-8 w-8 opacity-40" />
 
-                  <th className="py-2 text-right font-medium">
-                    نوع
-                  </th>
+                <span>
+                  هنوز معامله‌ای ثبت نشده است
+                </span>
 
-                  <th className="py-2 text-right font-medium">
-                    حجم
-                  </th>
+                <span className="text-xs">
+                  پس از ثبت معامله، آخرین معاملات در این قسمت نمایش داده می‌شوند.
+                </span>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted-foreground">
+                    <th className="py-2 text-right font-medium">
+                      نماد
+                    </th>
 
-                  <th className="py-2 text-right font-medium">
-                    R:R
-                  </th>
+                    <th className="py-2 text-right font-medium">
+                      نوع
+                    </th>
 
-                  <th className="py-2 text-right font-medium">
-                    سود/زیان
-                  </th>
+                    <th className="py-2 text-right font-medium">
+                      حجم
+                    </th>
 
-                  <th className="py-2 text-right font-medium">
-                    تاریخ
-                  </th>
-                </tr>
-              </thead>
+                    <th className="py-2 text-right font-medium">
+                      R:R
+                    </th>
 
-              <tbody>
-                {summary.transactions
-                  .slice(0, 6)
-                  .map(
-                    (trade, index) => {
-                      const isBuy =
-                        trade.transaction_type ===
-                        "buy";
+                    <th className="py-2 text-right font-medium">
+                      سود/زیان
+                    </th>
 
-                      return (
-                        <tr
-                          key={`${trade.symbol}-${trade.created_at}-${index}`}
-                          className="border-b border-border/50 last:border-0"
-                        >
-                          <td className="py-3 font-medium">
-                            {trade.symbol}
-                          </td>
+                    <th className="py-2 text-right font-medium">
+                      تاریخ
+                    </th>
+                  </tr>
+                </thead>
 
-                          <td className="py-3">
-                            <Badge
-                              variant="outline"
-                              className={
-                                isBuy
-                                  ? "border-primary/40 bg-primary/10 text-primary"
-                                  : "border-destructive/40 bg-destructive/10 text-destructive"
-                              }
-                            >
-                              {isBuy
-                                ? "خرید"
-                                : "فروش"}
-                            </Badge>
-                          </td>
+                <tbody>
+                  {transactions
+                    .slice(0, 6)
+                    .map(
+                      (
+                        trade,
+                        index,
+                      ) => {
+                        const isBuy =
+                          trade.transaction_type ===
+                          "buy";
 
-                          <td className="py-3 tabular">
-                            {trade.volume}
-                          </td>
+                        const reward =
+                          toSafeNumber(
+                            trade.total_reward,
+                          );
 
-                          <td className="py-3 tabular">
-                            {trade.r_r}
-                          </td>
-
-                          <td
-                            className={`py-3 tabular font-medium ${
-                              trade.total_reward >=
-                              0
-                                ? "gain"
-                                : "loss"
-                            }`}
-                          >
-                            {formatSignedMoney(
-                              trade.total_reward,
-                            )}
-                          </td>
-
-                          <td className="py-3 text-xs text-muted-foreground tabular">
-                            {formatDate(
+                        return (
+                          <tr
+                            key={`${toSafeString(
+                              trade.symbol,
+                              "trade",
+                            )}-${toSafeString(
                               trade.created_at,
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    },
-                  )}
-              </tbody>
-            </table>
+                              String(index),
+                            )}-${index}`}
+                            className="border-b border-border/50 last:border-0"
+                          >
+                            <td className="py-3 font-medium">
+                              {toSafeString(
+                                trade.symbol,
+                              )}
+                            </td>
+
+                            <td className="py-3">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  isBuy
+                                    ? "border-primary/40 bg-primary/10 text-primary"
+                                    : "border-destructive/40 bg-destructive/10 text-destructive"
+                                }
+                              >
+                                {isBuy
+                                  ? "خرید"
+                                  : "فروش"}
+                              </Badge>
+                            </td>
+
+                            <td className="py-3 tabular">
+                              {toSafeString(
+                                trade.volume,
+                                "0",
+                              )}
+                            </td>
+
+                            <td className="py-3 tabular">
+                              {toSafeString(
+                                trade.r_r,
+                                "—",
+                              )}
+                            </td>
+
+                            <td
+                              className={`py-3 tabular font-medium ${
+                                reward >=
+                                0
+                                  ? "gain"
+                                  : "loss"
+                              }`}
+                            >
+                              {formatSignedMoney(
+                                reward,
+                              )}
+                            </td>
+
+                            <td className="py-3 text-xs text-muted-foreground tabular">
+                              {formatDate(
+                                trade.created_at,
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
@@ -986,32 +1558,38 @@ function DashboardPage() {
               بهترین معامله
             </div>
 
-            <div className="mt-3 text-lg font-bold">
-              {
-                summary.best_transaction
-                  .symbol
-              }
-            </div>
+            {bestTransaction ? (
+              <>
+                <div className="mt-3 text-lg font-bold">
+                  {toSafeString(
+                    bestTransaction.symbol,
+                  )}
+                </div>
 
-            <div className="gain text-2xl font-bold tabular">
-              {formatSignedMoney(
-                summary.best_transaction
-                  .total_reward,
-              )}
-            </div>
+                <div className="gain text-2xl font-bold tabular">
+                  {formatSignedMoney(
+                    toSafeNumber(
+                      bestTransaction.total_reward,
+                    ),
+                  )}
+                </div>
 
-            <div className="mt-2 text-xs text-muted-foreground">
-              R:R{" "}
-              {
-                summary.best_transaction
-                  .r_r
-              }{" "}
-              •{" "}
-              {formatDate(
-                summary.best_transaction
-                  .created_at,
-              )}
-            </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  R:R{" "}
+                  {toSafeString(
+                    bestTransaction.r_r,
+                  )}{" "}
+                  •{" "}
+                  {formatDate(
+                    bestTransaction.created_at,
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 text-sm text-muted-foreground">
+                هنوز معامله‌ای برای نمایش وجود ندارد.
+              </div>
+            )}
           </div>
 
           {/* Worst */}
@@ -1023,32 +1601,38 @@ function DashboardPage() {
               بدترین معامله
             </div>
 
-            <div className="mt-3 text-lg font-bold">
-              {
-                summary.worst_transaction
-                  .symbol
-              }
-            </div>
+            {worstTransaction ? (
+              <>
+                <div className="mt-3 text-lg font-bold">
+                  {toSafeString(
+                    worstTransaction.symbol,
+                  )}
+                </div>
 
-            <div className="loss text-2xl font-bold tabular">
-              {formatSignedMoney(
-                summary.worst_transaction
-                  .total_reward,
-              )}
-            </div>
+                <div className="loss text-2xl font-bold tabular">
+                  {formatSignedMoney(
+                    toSafeNumber(
+                      worstTransaction.total_reward,
+                    ),
+                  )}
+                </div>
 
-            <div className="mt-2 text-xs text-muted-foreground">
-              R:R{" "}
-              {
-                summary.worst_transaction
-                  .r_r
-              }{" "}
-              •{" "}
-              {formatDate(
-                summary.worst_transaction
-                  .created_at,
-              )}
-            </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  R:R{" "}
+                  {toSafeString(
+                    worstTransaction.r_r,
+                  )}{" "}
+                  •{" "}
+                  {formatDate(
+                    worstTransaction.created_at,
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 text-sm text-muted-foreground">
+                هنوز معامله‌ای برای نمایش وجود ندارد.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1066,8 +1650,11 @@ function DashboardPage() {
           </div>
 
           <div className="mt-2 text-2xl font-bold gain tabular">
-            +{formatMoney(
-              summary.total_profit,
+            +
+            {formatMoney(
+              toSafeNumber(
+                safeSummary.total_profit,
+              ),
             )}
           </div>
         </div>
@@ -1080,8 +1667,11 @@ function DashboardPage() {
           </div>
 
           <div className="mt-2 text-2xl font-bold loss tabular">
-            -{formatMoney(
-              summary.total_loss,
+            -
+            {formatMoney(
+              toSafeNumber(
+                safeSummary.total_loss,
+              ),
             )}
           </div>
         </div>
@@ -1094,7 +1684,9 @@ function DashboardPage() {
           </div>
 
           <div className="mt-2 text-2xl font-bold tabular">
-            {summary.total_trades.toLocaleString(
+            {toSafeNumber(
+              safeSummary.total_trades,
+            ).toLocaleString(
               "fa-IR",
             )}
           </div>

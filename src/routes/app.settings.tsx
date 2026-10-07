@@ -51,12 +51,47 @@ import {
   type UserProfile,
 } from "@/api/user";
 
+import {
+  getCurrentPlan,
+  getPlans,
+  type CurrentPlan,
+  type Plan,
+} from "@/api/plan";
+
+import {
+  requestPayment,
+  verifyPayment,
+  type PaymentRequestResponse,
+} from "@/api/payment";
+
 export const Route = createFileRoute("/app/settings")({
   head: () => ({
     meta: [{ title: "تنظیمات" }],
   }),
   component: SettingsPage,
 });
+
+/* =========================================================
+   Helpers
+========================================================= */
+
+function formatPrice(price: number) {
+  return `${new Intl.NumberFormat("fa-IR").format(price)} تومان`;
+}
+
+function formatDate(date: string | null | undefined) {
+  if (!date) {
+    return "—";
+  }
+
+  const parts = date.split("-");
+
+  if (parts.length !== 3) {
+    return date;
+  }
+
+  return `${parts[0]}/${parts[1]}/${parts[2]}`;
+}
 
 /* =========================================================
    MetaTrader
@@ -86,10 +121,6 @@ function MetaTraderSettings() {
 
   const [copied, setCopied] =
     useState(false);
-
-  /* =======================================================
-     Load MetaTrader Status
-  ======================================================= */
 
   async function loadMetaTraderStatus(
     showRefreshState = false,
@@ -129,10 +160,6 @@ function MetaTraderSettings() {
     void loadMetaTraderStatus();
   }, []);
 
-  /* =======================================================
-     Copy API Key
-  ======================================================= */
-
   async function copyApiKey() {
     if (!status?.api_key) {
       return;
@@ -155,10 +182,6 @@ function MetaTraderSettings() {
       );
     }
   }
-
-  /* =======================================================
-     Download EA
-  ======================================================= */
 
   async function handleDownloadEA() {
     if (downloadingEA) {
@@ -230,10 +253,6 @@ function MetaTraderSettings() {
   return (
     <div className="space-y-6">
 
-      {/* ===================================================
-          Header
-      =================================================== */}
-
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between">
 
         <div className="flex items-start gap-4">
@@ -281,10 +300,6 @@ function MetaTraderSettings() {
 
       </div>
 
-      {/* ===================================================
-          Loading
-      =================================================== */}
-
       {loading && (
         <div className="card-surface p-6">
 
@@ -304,10 +319,6 @@ function MetaTraderSettings() {
 
         </div>
       )}
-
-      {/* ===================================================
-          Error
-      =================================================== */}
 
       {!loading && error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
@@ -345,16 +356,8 @@ function MetaTraderSettings() {
         </div>
       )}
 
-      {/* ===================================================
-          Status
-      =================================================== */}
-
       {!loading && !error && status && (
         <>
-
-          {/* =================================================
-              Connection Status
-          ================================================= */}
 
           <div className="card-surface p-6">
 
@@ -468,10 +471,6 @@ function MetaTraderSettings() {
 
           </div>
 
-          {/* =================================================
-              API Key
-          ================================================= */}
-
           <div className="card-surface p-6">
 
             <div className="flex items-start gap-3">
@@ -554,10 +553,6 @@ function MetaTraderSettings() {
 
           </div>
 
-          {/* =================================================
-              Installation Guide
-          ================================================= */}
-
           <div className="card-surface p-6">
 
             <div className="flex items-start gap-3">
@@ -582,10 +577,6 @@ function MetaTraderSettings() {
 
             <div className="mt-6 space-y-5">
 
-              {/* =================================================
-                  Step 1
-              ================================================= */}
-
               <div className="flex gap-3">
 
                 <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -605,10 +596,6 @@ function MetaTraderSettings() {
                 </div>
 
               </div>
-
-              {/* =================================================
-                  Step 2
-              ================================================= */}
 
               <div className="flex gap-3">
 
@@ -691,10 +678,6 @@ function MetaTraderSettings() {
 
               </div>
 
-              {/* =================================================
-                  Step 3
-              ================================================= */}
-
               <div className="flex gap-3">
 
                 <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -743,10 +726,6 @@ function MetaTraderSettings() {
 
               </div>
 
-              {/* =================================================
-                  Step 4
-              ================================================= */}
-
               <div className="flex gap-3">
 
                 <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -784,10 +763,6 @@ function MetaTraderSettings() {
                 </div>
 
               </div>
-
-              {/* =================================================
-                  Step 5
-              ================================================= */}
 
               <div className="flex gap-3">
 
@@ -827,10 +802,6 @@ function MetaTraderSettings() {
 
               </div>
 
-              {/* =================================================
-                  Step 6
-              ================================================= */}
-
               <div className="flex gap-3">
 
                 <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -865,10 +836,6 @@ function MetaTraderSettings() {
                 </div>
 
               </div>
-
-              {/* =================================================
-                  Step 7
-              ================================================= */}
 
               <div className="flex gap-3">
 
@@ -918,10 +885,6 @@ function MetaTraderSettings() {
 
           </div>
 
-          {/* =================================================
-              Disconnected Message
-          ================================================= */}
-
           {!isConnected && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
 
@@ -947,10 +910,6 @@ function MetaTraderSettings() {
 
             </div>
           )}
-
-          {/* =================================================
-              Connected Message
-          ================================================= */}
 
           {isConnected && (
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-6">
@@ -978,6 +937,848 @@ function MetaTraderSettings() {
           )}
 
         </>
+      )}
+
+    </div>
+  );
+}
+
+/* =========================================================
+   Subscription Settings
+========================================================= */
+
+function SubscriptionSettings() {
+  const [currentPlan, setCurrentPlan] =
+    useState<CurrentPlan | null>(null);
+
+  const [plans, setPlans] =
+    useState<Plan[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [selectedPlanId, setSelectedPlanId] =
+    useState<number | null>(null);
+
+  const [discountCode, setDiscountCode] =
+    useState("");
+
+  const [discountApplied, setDiscountApplied] =
+    useState(false);
+
+  const [paymentLoading, setPaymentLoading] =
+    useState(false);
+
+  const [paymentError, setPaymentError] =
+    useState<string | null>(null);
+
+  const [paymentResult, setPaymentResult] =
+    useState<PaymentRequestResponse | null>(null);
+
+  const [verifyLoading, setVerifyLoading] =
+    useState(false);
+
+  const [verifyMessage, setVerifyMessage] =
+    useState<string | null>(null);
+
+  async function loadSubscription(
+    showRefreshState = false,
+  ) {
+    try {
+      if (showRefreshState) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError(null);
+
+      const [
+        currentPlanResponse,
+        plansResponse,
+      ] = await Promise.all([
+        getCurrentPlan(),
+        getPlans(),
+      ]);
+
+      setCurrentPlan(currentPlanResponse);
+      setPlans(plansResponse);
+
+      const matchingPlan =
+        plansResponse.find(
+          (plan) =>
+            plan.id === currentPlanResponse.type,
+        );
+
+      if (matchingPlan) {
+        setSelectedPlanId(matchingPlan.id);
+      } else if (plansResponse.length > 0) {
+        const firstPaidPlan =
+          plansResponse.find(
+            (plan) => plan.price > 0,
+          );
+
+        setSelectedPlanId(
+          firstPaidPlan?.id ??
+            plansResponse[0].id,
+        );
+      }
+    } catch (err) {
+      console.error(
+        "Get subscription information error:",
+        err,
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "خطا در دریافت اطلاعات اشتراک",
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSubscription();
+  }, []);
+
+  /*
+   * بررسی برگشت از درگاه.
+   *
+   * Endpoint verify طبق Swagger پارامتر رسمی ندارد
+   * و authority را از callback دریافت می‌کند.
+   *
+   * بنابراین اگر authority در URL وجود داشته باشد،
+   * verify را فراخوانی می‌کنیم.
+   */
+  useEffect(() => {
+    const params =
+      new URLSearchParams(
+        window.location.search,
+      );
+
+    const authority =
+      params.get("Authority") ||
+      params.get("authority");
+
+    if (!authority) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function verify() {
+      try {
+        setVerifyLoading(true);
+        setVerifyMessage(null);
+
+        const response =
+          await verifyPayment();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (response.success) {
+          setVerifyMessage(
+            response.message ||
+              "پرداخت با موفقیت تأیید شد.",
+          );
+
+          await loadSubscription(true);
+        } else {
+          setVerifyMessage(
+            response.message ||
+              "تأیید پرداخت انجام نشد.",
+          );
+        }
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(
+          "Verify payment error:",
+          err,
+        );
+
+        setVerifyMessage(
+          err instanceof Error
+            ? err.message
+            : "خطا در تأیید پرداخت",
+        );
+      } finally {
+        if (!cancelled) {
+          setVerifyLoading(false);
+        }
+      }
+    }
+
+    void verify();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleDiscountApply() {
+    const code =
+      discountCode.trim();
+
+    if (!code) {
+      setDiscountApplied(false);
+      setPaymentError(
+        "ابتدا کد تخفیف را وارد کنید.",
+      );
+      return;
+    }
+
+    setPaymentError(null);
+    setDiscountApplied(true);
+  }
+
+  async function handlePayment() {
+    if (paymentLoading) {
+      return;
+    }
+
+    setPaymentError(null);
+    setPaymentResult(null);
+
+    if (!selectedPlanId) {
+      setPaymentError(
+        "ابتدا یک پلن را انتخاب کنید.",
+      );
+      return;
+    }
+
+    const selectedPlan =
+      plans.find(
+        (plan) =>
+          plan.id === selectedPlanId,
+      );
+
+    if (!selectedPlan) {
+      setPaymentError(
+        "پلن انتخاب‌شده پیدا نشد. لطفاً دوباره تلاش کنید.",
+      );
+      return;
+    }
+
+    /*
+     * پلن رایگان نیازی به درگاه پرداخت ندارد.
+     * برای جلوگیری از ارسال درخواست اشتباه به payment/request
+     * آن را مستقیماً متوقف می‌کنیم.
+     */
+    if (selectedPlan.price <= 0) {
+      setPaymentError(
+        "این پلن رایگان است و نیازی به پرداخت ندارد.",
+      );
+      return;
+    }
+
+    try {
+      setPaymentLoading(true);
+
+      const response =
+        await requestPayment({
+          subscription_id:
+            selectedPlan.id,
+          discount_code:
+            discountCode.trim(),
+        });
+
+      setPaymentResult(response);
+
+      if (!response.success) {
+        setPaymentError(
+          "ایجاد درخواست پرداخت انجام نشد.",
+        );
+        return;
+      }
+
+      if (!response.payment_url) {
+        setPaymentError(
+          "لینک پرداخت از سرور دریافت نشد.",
+        );
+        return;
+      }
+
+      /*
+       * ابتدا نتیجه درخواست را نشان می‌دهیم،
+       * سپس کاربر را به درگاه منتقل می‌کنیم.
+       */
+      window.location.href =
+        response.payment_url;
+    } catch (err) {
+      console.error(
+        "Request payment error:",
+        err,
+      );
+
+      setPaymentError(
+        err instanceof Error
+          ? err.message
+          : "خطا در ایجاد درخواست پرداخت",
+      );
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+
+  const selectedPlan =
+    plans.find(
+      (plan) =>
+        plan.id === selectedPlanId,
+    ) ?? null;
+
+  if (loading) {
+    return (
+      <div className="card-surface p-6">
+
+        <div className="flex items-center justify-center py-12">
+
+          <div className="text-center">
+
+            <RefreshCw className="mx-auto h-7 w-7 animate-spin text-primary" />
+
+            <p className="mt-3 text-sm text-muted-foreground">
+              در حال دریافت اطلاعات اشتراک...
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+
+        <div className="flex items-start gap-3">
+
+          <CircleX className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+
+          <div className="flex-1">
+
+            <div className="font-semibold text-destructive">
+              دریافت اطلاعات اشتراک انجام نشد
+            </div>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              {error}
+            </p>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4"
+              onClick={() => {
+                void loadSubscription();
+              }}
+            >
+              تلاش مجدد
+            </Button>
+
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* =====================================================
+          Payment verification result
+      ===================================================== */}
+
+      {verifyLoading && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+
+          <div className="flex items-center gap-2 text-sm">
+
+            <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+
+            در حال بررسی نتیجه پرداخت...
+
+          </div>
+
+        </div>
+      )}
+
+      {verifyMessage && !verifyLoading && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+
+          <div className="flex items-start gap-2">
+
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+
+            <p className="text-sm leading-6">
+              {verifyMessage}
+            </p>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          Current Plan
+      ===================================================== */}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+
+        <div className="card-surface p-6 lg:col-span-2">
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
+            <div>
+
+              <div className="text-sm text-muted-foreground">
+                اشتراک فعلی
+              </div>
+
+              <div className="mt-1 text-2xl font-bold">
+                {currentPlan?.type_name || "—"}
+              </div>
+
+            </div>
+
+            <Badge className="w-fit bg-primary text-primary-foreground">
+              فعال
+            </Badge>
+
+          </div>
+
+          <div className="mt-6 grid gap-4 text-sm sm:grid-cols-3">
+
+            <div>
+
+              <div className="text-muted-foreground">
+                شروع
+              </div>
+
+              <div className="mt-1 tabular">
+                {formatDate(
+                  currentPlan?.start_date,
+                )}
+              </div>
+
+            </div>
+
+            <div>
+
+              <div className="text-muted-foreground">
+                پایان
+              </div>
+
+              <div className="mt-1 tabular">
+                {formatDate(
+                  currentPlan?.end_date,
+                )}
+              </div>
+
+            </div>
+
+            <div>
+
+              <div className="text-muted-foreground">
+                نوع پلن
+              </div>
+
+              <div className="mt-1">
+                {currentPlan?.type_name || "—"}
+              </div>
+
+            </div>
+
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                void loadSubscription(true);
+              }}
+              disabled={refreshing}
+            >
+
+              <RefreshCw
+                className={`ml-2 h-4 w-4 ${
+                  refreshing
+                    ? "animate-spin"
+                    : ""
+                }`}
+              />
+
+              بروزرسانی اشتراک
+
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled
+            >
+              مشاهده فاکتورها
+            </Button>
+
+          </div>
+
+        </div>
+
+        {/* ===================================================
+            Discount
+        =================================================== */}
+
+        <div className="card-surface p-6">
+
+          <div className="font-semibold">
+            کد تخفیف
+          </div>
+
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            کد تخفیف هنگام ایجاد درخواست پرداخت برای بک‌اند ارسال می‌شود.
+          </p>
+
+          <div className="mt-4 flex gap-2">
+
+            <Input
+              value={discountCode}
+              onChange={(event) => {
+                setDiscountCode(
+                  event.target.value,
+                );
+                setDiscountApplied(false);
+                setPaymentError(null);
+              }}
+              placeholder="کد را وارد کنید"
+              className="bg-secondary/60"
+              dir="ltr"
+            />
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDiscountApply}
+            >
+              اعمال
+            </Button>
+
+          </div>
+
+          {discountApplied && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-primary">
+
+              <CheckCircle2 className="h-4 w-4" />
+
+              کد تخفیف برای پرداخت آماده شد.
+
+            </div>
+          )}
+
+          <div className="mt-4 rounded-lg bg-primary/10 p-3 text-sm text-primary">
+
+            <CheckCircle2 className="ml-1 inline h-4 w-4" />
+
+            پرداخت از طریق زرین‌پال
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* =====================================================
+          Available Plans
+      ===================================================== */}
+
+      <div className="card-surface p-6">
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+          <div>
+
+            <h3 className="text-lg font-semibold">
+              انتخاب پلن
+            </h3>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              پلن موردنظر خود را انتخاب کرده و سپس پرداخت را انجام دهید.
+            </p>
+
+          </div>
+
+          {selectedPlan && (
+            <Badge variant="outline">
+              انتخاب‌شده: {selectedPlan.name}
+            </Badge>
+          )}
+
+        </div>
+
+        {plans.length === 0 ? (
+          <div className="mt-6 rounded-lg border border-border p-5 text-center text-sm text-muted-foreground">
+            در حال حاضر پلنی برای خرید وجود ندارد.
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+
+            {plans.map((plan) => {
+
+              const isSelected =
+                selectedPlanId === plan.id;
+
+              const isCurrent =
+                currentPlan?.type === plan.id;
+
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPlanId(
+                      plan.id,
+                    );
+                    setPaymentError(null);
+                    setPaymentResult(null);
+                  }}
+                  className={`rounded-xl border p-5 text-right transition ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border bg-secondary/20 hover:border-primary/50"
+                  }`}
+                >
+
+                  <div className="flex items-start justify-between gap-3">
+
+                    <div>
+
+                      <div className="font-semibold">
+                        {plan.name}
+                      </div>
+
+                      {isCurrent && (
+                        <Badge
+                          variant="outline"
+                          className="mt-2"
+                        >
+                          پلن فعلی
+                        </Badge>
+                      )}
+
+                    </div>
+
+                    {isSelected && (
+                      <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
+                    )}
+
+                  </div>
+
+                  <div className="mt-5 text-xl font-bold tabular">
+                    {formatPrice(plan.price)}
+                  </div>
+
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {plan.price > 0
+                      ? "قابل پرداخت از طریق زرین‌پال"
+                      : "رایگان"}
+                  </div>
+
+                </button>
+              );
+            })}
+
+          </div>
+        )}
+
+      </div>
+
+      {/* =====================================================
+          Payment Summary
+      ===================================================== */}
+
+      {selectedPlan && (
+        <div className="card-surface p-6">
+
+          <div className="flex items-center gap-3">
+
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+              <CreditCard className="h-5 w-5" />
+            </div>
+
+            <div>
+
+              <h3 className="font-semibold">
+                خلاصه پرداخت
+              </h3>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedPlan.name}
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+
+            <div className="rounded-lg bg-secondary/40 p-4">
+
+              <div className="text-xs text-muted-foreground">
+                مبلغ اصلی
+              </div>
+
+              <div className="mt-2 font-semibold tabular">
+                {formatPrice(
+                  paymentResult?.original_amount ??
+                    selectedPlan.price,
+                )}
+              </div>
+
+            </div>
+
+            <div className="rounded-lg bg-secondary/40 p-4">
+
+              <div className="text-xs text-muted-foreground">
+                تخفیف
+              </div>
+
+              <div className="mt-2 font-semibold tabular text-primary">
+                {formatPrice(
+                  paymentResult?.discount_amount ??
+                    0,
+                )}
+              </div>
+
+            </div>
+
+            <div className="rounded-lg bg-primary/10 p-4">
+
+              <div className="text-xs text-muted-foreground">
+                مبلغ قابل پرداخت
+              </div>
+
+              <div className="mt-2 font-bold tabular">
+                {formatPrice(
+                  paymentResult?.amount ??
+                    selectedPlan.price,
+                )}
+              </div>
+
+            </div>
+
+          </div>
+
+          {paymentError && (
+            <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+
+              <div className="flex items-start gap-2">
+
+                <CircleX className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+
+                <div>
+
+                  <div className="font-medium text-destructive">
+                    پرداخت انجام نشد
+                  </div>
+
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {paymentError}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+
+            <Button
+              type="button"
+              onClick={() => {
+                void handlePayment();
+              }}
+              disabled={
+                paymentLoading ||
+                !selectedPlan ||
+                selectedPlan.price <= 0
+              }
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+
+              {paymentLoading ? (
+                <>
+                  <RefreshCw className="ml-2 h-4 w-4 animate-spin" />
+                  در حال ایجاد درخواست پرداخت...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="ml-2 h-4 w-4" />
+                  پرداخت و تمدید اشتراک
+                </>
+              )}
+
+            </Button>
+
+            {discountCode.trim() && (
+              <div className="text-xs text-muted-foreground">
+                کد تخفیف:
+                {" "}
+                <span
+                  dir="ltr"
+                  className="font-mono text-foreground"
+                >
+                  {discountCode.trim()}
+                </span>
+              </div>
+            )}
+
+          </div>
+
+          {paymentResult?.success && (
+            <div className="mt-5 rounded-lg border border-primary/30 bg-primary/5 p-4">
+
+              <div className="flex items-start gap-2">
+
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+
+                <div>
+
+                  <div className="font-medium text-primary">
+                    درخواست پرداخت با موفقیت ایجاد شد
+                  </div>
+
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    در حال انتقال به درگاه پرداخت زرین‌پال...
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+        </div>
       )}
 
     </div>
@@ -1258,116 +2059,7 @@ function SettingsPage() {
           value="subscription"
           className="mt-6"
         >
-
-          <div className="grid gap-4 lg:grid-cols-3">
-
-            <div className="card-surface p-6 lg:col-span-2">
-
-              <div className="flex items-center justify-between">
-
-                <div>
-
-                  <div className="text-sm text-muted-foreground">
-                    اشتراک فعلی
-                  </div>
-
-                  <div className="mt-1 text-2xl font-bold">
-                    Pro Max
-                  </div>
-
-                </div>
-
-                <Badge className="bg-primary text-primary-foreground">
-                  فعال
-                </Badge>
-
-              </div>
-
-              <div className="mt-6 grid gap-4 text-sm sm:grid-cols-3">
-
-                <div>
-
-                  <div className="text-muted-foreground">
-                    شروع
-                  </div>
-
-                  <div className="mt-1 tabular">
-                    ۱۴۰۳/۰۷/۰۱
-                  </div>
-
-                </div>
-
-                <div>
-
-                  <div className="text-muted-foreground">
-                    پایان
-                  </div>
-
-                  <div className="mt-1 tabular">
-                    ۱۴۰۳/۰۸/۰۱
-                  </div>
-
-                </div>
-
-                <div>
-
-                  <div className="text-muted-foreground">
-                    مبلغ ماهانه
-                  </div>
-
-                  <div className="mt-1 tabular">
-                    ۲,۰۰۰,۰۰۰ تومان
-                  </div>
-
-                </div>
-
-              </div>
-
-              <div className="mt-6 flex gap-2">
-
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  تمدید اشتراک
-                </Button>
-
-                <Button variant="outline">
-                  مشاهده فاکتورها
-                </Button>
-
-              </div>
-
-            </div>
-
-            <div className="card-surface p-6">
-
-              <div className="font-semibold">
-                کد تخفیف
-              </div>
-
-              <div className="mt-3 flex gap-2">
-
-                <Input
-                  placeholder="کد را وارد کنید"
-                  className="bg-secondary/60"
-                />
-
-                <Button variant="outline">
-                  اعمال
-                </Button>
-
-              </div>
-
-              <div className="mt-4 rounded-lg bg-primary/10 p-3 text-sm text-primary">
-
-                <CheckCircle2 className="ml-1 inline h-4 w-4" />
-
-                پرداخت از طریق زرین‌پال
-
-              </div>
-
-            </div>
-
-          </div>
-
+          <SubscriptionSettings />
         </TabsContent>
 
         {/* =================================================

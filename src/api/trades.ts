@@ -1,3 +1,4 @@
+
 import { getAccessToken } from "@/lib/auth-storage";
 
 const API_BASE = "/backend";
@@ -59,26 +60,43 @@ function getToken(): string | null {
   return getAccessToken();
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get("content-type") ?? "";
+async function parseResponse<T>(
+  response: Response,
+): Promise<T> {
+  const contentType =
+    response.headers.get("content-type") ?? "";
 
-  const data = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
+  const data =
+    contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
 
   if (!response.ok) {
     let message = "خطا در برقراری ارتباط با سرور";
 
-    if (typeof data === "string" && data.trim()) {
+    if (
+      typeof data === "string" &&
+      data.trim()
+    ) {
       message = data;
-    } else if (data && typeof data === "object") {
-      const errorData = data as Record<string, unknown>;
+    } else if (
+      data &&
+      typeof data === "object"
+    ) {
+      const errorData =
+        data as Record<string, unknown>;
 
-      if (typeof errorData.detail === "string") {
+      if (
+        typeof errorData.detail === "string"
+      ) {
         message = errorData.detail;
-      } else if (typeof errorData.message === "string") {
+      } else if (
+        typeof errorData.message === "string"
+      ) {
         message = errorData.message;
-      } else if (typeof errorData.error === "string") {
+      } else if (
+        typeof errorData.error === "string"
+      ) {
         message = errorData.error;
       }
     }
@@ -89,14 +107,49 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function getTrades(page = 1): Promise<TradesResponse> {
+/**
+ * دریافت معاملات صفحه مشخص.
+ *
+ * API:
+ * GET /app/trades/?page=1
+ * GET /app/trades/?page=2
+ * ...
+ *
+ * ساختار فعلی API:
+ *
+ * {
+ *   "count": 131,
+ *   "next": "...?page=2",
+ *   "previous": null,
+ *   "transactions": [...]
+ * }
+ *
+ * همچنین ساختار قدیمی زیر نیز پشتیبانی می‌شود:
+ *
+ * {
+ *   "count": 131,
+ *   "next": "...?page=2",
+ *   "previous": null,
+ *   "results": {
+ *     "transactions": [...]
+ *   }
+ * }
+ *
+ * بک‌اند خودش پرتفولیوی فعال را تشخیص می‌دهد.
+ */
+export async function getTrades(
+  page = 1,
+): Promise<TradesResponse> {
   const token = getToken();
 
   if (!token) {
     throw new Error("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.");
   }
 
-  const safePage = Math.max(1, Math.floor(page));
+  const safePage = Math.max(
+    1,
+    Math.floor(page),
+  );
 
   const response = await fetch(`${API_BASE}/app/trades/?page=${safePage}`, {
     method: "GET",
@@ -106,31 +159,87 @@ export async function getTrades(page = 1): Promise<TradesResponse> {
     },
   });
 
-  const data = await parseResponse<unknown>(response);
+  const data = await parseResponse<unknown>(
+    response,
+  );
 
-  if (data && typeof data === "object" && !Array.isArray(data)) {
-    const responseData = data as Record<string, unknown>;
+  /*
+   * ساختار JSON فعلی API:
+   *
+   * {
+   *   count: 131,
+   *   next: "...",
+   *   previous: null,
+   *   transactions: [...]
+   * }
+   */
 
-    const results =
-      responseData.results && typeof responseData.results === "object"
-        ? (responseData.results as Record<string, unknown>)
+  if (
+    data &&
+    typeof data === "object" &&
+    !Array.isArray(data)
+  ) {
+    const responseData =
+      data as Record<string, unknown>;
+
+    /*
+     * اول ساختار فعلی API را بررسی می‌کنیم:
+     *
+     * response.transactions
+     */
+    const directTransactions =
+      Array.isArray(
+        responseData.transactions,
+      )
+        ? (responseData.transactions as Trade[])
         : null;
 
-    const transactions = Array.isArray(results?.transactions)
-      ? (results?.transactions as Trade[])
-      : [];
+    /*
+     * سپس ساختار قدیمی API را بررسی می‌کنیم:
+     *
+     * response.results.transactions
+     */
+    const results =
+      responseData.results &&
+      typeof responseData.results === "object"
+        ? (responseData.results as Record<
+            string,
+            unknown
+          >)
+        : null;
+
+    const nestedTransactions =
+      Array.isArray(
+        results?.transactions,
+      )
+        ? (results.transactions as Trade[])
+        : null;
+
+    /*
+     * اگر ساختار فعلی وجود داشت،
+     * همان را استفاده می‌کنیم.
+     *
+     * در غیر این صورت ساختار قدیمی.
+     */
+    const transactions =
+      directTransactions ??
+      nestedTransactions ??
+      [];
 
     return {
       count:
-        typeof responseData.count === "number"
+        typeof responseData.count ===
+        "number"
           ? responseData.count
           : transactions.length,
       next:
-        typeof responseData.next === "string"
+        typeof responseData.next ===
+        "string"
           ? responseData.next
           : null,
       previous:
-        typeof responseData.previous === "string"
+        typeof responseData.previous ===
+        "string"
           ? responseData.previous
           : null,
       results: {
@@ -139,6 +248,10 @@ export async function getTrades(page = 1): Promise<TradesResponse> {
     };
   }
 
+  /*
+   * پgit statusشتیبانی احتیاطی از نسخه‌های قدیمی API
+   * اگر بک‌اند مستقیماً آرایه برگرداند.
+   */
   if (Array.isArray(data)) {
     return {
       count: data.length,
@@ -150,6 +263,10 @@ export async function getTrades(page = 1): Promise<TradesResponse> {
     };
   }
 
+  /*
+   * اگر پاسخ API ساختار شناخته‌شده‌ای نداشت،
+   * یک پاسخ خالی و معتبر برمی‌گردانیم.
+   */
   return {
     count: 0,
     next: null,
@@ -158,27 +275,4 @@ export async function getTrades(page = 1): Promise<TradesResponse> {
       transactions: [],
     },
   };
-}
-
-export async function createTrade(payload: CreateTradePayload): Promise<Trade> {
-  const token = getToken();
-
-  if (!token) {
-    throw new Error("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.");
-  }
-
-  // حذف فیلد تصویر برای ارسال به صورت JSON
-  const { chart_image, ...bodyPayload } = payload;
-
-  const response = await fetch(`${API_BASE}/app/trades/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(bodyPayload),
-  });
-
-  return await parseResponse<Trade>(response);
 }
