@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 
 import {
   getTrades,
+  getNetProfitLoss,
   type Trade,
 } from "@/api/trades";
 
@@ -259,7 +260,7 @@ function buildCalendarForMonth(
     if (!current) continue;
 
     current.transactions_count += 1;
-    current.profit_loss += toNumber(trade.profit_loss);
+    current.profit_loss += getNetProfitLoss(trade);
   }
 
   const days = Array.from(daysMap.values());

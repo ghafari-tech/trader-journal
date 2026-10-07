@@ -1,3 +1,7 @@
 node_modules
 .output/
 src/routeTree.gen.ts
+
+# Local temp / backup files
+.tanstack/
+*.backup

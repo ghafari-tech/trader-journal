@@ -14,6 +14,8 @@ export interface Trade {
   volume: string | number;
   stop_loss?: string | number | null;
   take_profit?: string | number | null;
+  swap?: string | number | null;
+  commission?: string | number | null;
   risk_reward: string | number;
   profit_loss: string | number;
   followed_plan: boolean;
@@ -21,6 +23,27 @@ export interface Trade {
   created_at: string;
   closed_at: string | null;
   portfolio: string | number;
+}
+
+export function getNetProfitLoss(trade: Trade): number {
+  const grossProfit =
+    typeof trade.profit_loss === "number"
+      ? trade.profit_loss
+      : parseFloat(String(trade.profit_loss || 0));
+  const swap =
+    typeof trade.swap === "number"
+      ? trade.swap
+      : parseFloat(String(trade.swap || 0));
+  const commission =
+    typeof trade.commission === "number"
+      ? trade.commission
+      : parseFloat(String(trade.commission || 0));
+
+  const safeGross = isNaN(grossProfit) ? 0 : grossProfit;
+  const safeSwap = isNaN(swap) ? 0 : swap;
+  const safeCommission = isNaN(commission) ? 0 : commission;
+
+  return safeGross + safeSwap + safeCommission;
 }
 
 export interface TradesResult {
