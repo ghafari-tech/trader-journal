@@ -28,11 +28,14 @@ import {
 } from "react";
 
 import { apiFetch } from "@/api/client";
+import { logout } from "@/api/auth";
+
 import {
   getNotifications,
   markNotificationAsRead,
   type Notification,
 } from "@/api/notification";
+
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -345,6 +348,9 @@ function UserBlock({
   const [error, setError] =
     useState(false);
 
+  const [loggingOut, setLoggingOut] =
+    useState(false);
+
   async function loadUserData() {
     try {
       setLoading(true);
@@ -353,8 +359,6 @@ function UserBlock({
       /*
        * مسیر صحیح طبق Swagger:
        * GET /app/settings/user-info/
-       *
-       * مسیر قبلی /app/settings/user/ اشتباه بود.
        */
       const userResponse =
         await apiFetch<UserApiResponse>(
@@ -365,7 +369,7 @@ function UserBlock({
         );
 
       /*
-       * مسیر پلن طبق URLهای Django:
+       * مسیر پلن:
        * GET /app/settings/plan/
        */
       const planResponse =
@@ -390,6 +394,45 @@ function UserBlock({
       setError(true);
     } finally {
       setLoading(false);
+    }
+  }
+
+  /**
+   * خروج از حساب
+   */
+  async function handleLogout() {
+    if (loggingOut) {
+      return;
+    }
+
+    try {
+      setLoggingOut(true);
+
+      await logout();
+
+      toast.success(
+        "با موفقیت از حساب خارج شدید",
+      );
+
+      /*
+       * انتقال به صفحه اول سایت
+       */
+      window.location.href = "/";
+    } catch (error) {
+      console.error(
+        "Logout error:",
+        error,
+      );
+
+      /*
+       * حتی اگر API خطا بدهد،
+       * logout() توکن‌های محلی را پاک کرده است.
+       */
+      toast.error(
+        "از حساب خارج شدید",
+      );
+
+      window.location.href = "/";
     }
   }
 
@@ -733,15 +776,21 @@ function UserBlock({
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
+          disabled={loggingOut}
           className="cursor-pointer text-destructive focus:text-destructive"
           onSelect={() => {
-            toast.success(
-              "خارج شدی — به‌زودی به صفحه ورود برمی‌گردی",
-            );
+            void handleLogout();
           }}
         >
-          <LogOut className="ml-2 h-4 w-4" />
-          خروج از حساب
+          {loggingOut ? (
+            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+          ) : (
+            <LogOut className="ml-2 h-4 w-4" />
+          )}
+
+          {loggingOut
+            ? "در حال خروج..."
+            : "خروج از حساب"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -844,26 +893,19 @@ function NotificationsMenu() {
 
   /**
    * خوانده‌شده کردن اعلان
-   *
-   * فقط اگر اعلان هنوز خوانده نشده باشد
-   * API مربوط به read فراخوانی می‌شود.
    */
   async function handleNotificationClick(
     notification: Notification,
   ) {
-    // اگر قبلاً خوانده شده، دوباره API را صدا نزن
     if (notification.is_read) {
       return;
     }
 
     try {
-      // PUT /notification/read/{id}/
       await markNotificationAsRead(
         notification.id,
       );
 
-      // بعد از موفقیت API، وضعیت همان اعلان
-      // را در state تغییر می‌دهیم.
       setNotifications(
         (currentNotifications) =>
           currentNotifications.map(

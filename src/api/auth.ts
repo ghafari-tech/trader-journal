@@ -1,6 +1,11 @@
 
 import { apiFetch } from "@/api/client";
-import { setAuthTokens } from "@/lib/auth-storage";
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAuthTokens,
+} from "@/lib/auth-storage";
 import {
   setCurrentUser,
   clearCurrentUser,
@@ -207,3 +212,88 @@ export async function verifyRegister(
   return payload;
 }
 
+/**
+ * خروج از حساب
+ *
+ * POST /logout/
+ *
+ * Access Token:
+ * Authorization: Bearer <access_token>
+ *
+ * Request Body:
+ * {
+ *   refresh: "<refresh_token>"
+ * }
+ */
+export async function logout() {
+  const accessToken =
+    getAccessToken();
+
+  const refreshToken =
+    getRefreshToken();
+
+  /*
+   * اگر توکن‌ها وجود نداشته باشند،
+   * نیازی به ارسال درخواست Logout نیست.
+   * فقط اطلاعات محلی را پاک می‌کنیم.
+   */
+  if (!accessToken || !refreshToken) {
+    clearAuthTokens();
+    clearCurrentUser();
+
+    return {
+      success: true,
+      skipped: true,
+    };
+  }
+
+  try {
+    await apiFetch<unknown>(
+      "/logout/",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          refresh: refreshToken,
+        }),
+      },
+      {
+        /*
+         * apiFetch به صورت پیش‌فرض
+         * Access Token را در Authorization
+         * قرار می‌دهد.
+         */
+        auth: true,
+      },
+    );
+
+    /*
+     * بعد از موفقیت API،
+     * توکن‌های محلی را پاک می‌کنیم.
+     */
+    clearAuthTokens();
+    clearCurrentUser();
+
+    return {
+      success: true,
+      skipped: false,
+    };
+  } catch (error) {
+    /*
+     * حتی اگر API Logout خطا بدهد،
+     * باید session محلی کاربر بسته شود.
+     */
+    console.error(
+      "Logout API error:",
+      error,
+    );
+
+    clearAuthTokens();
+    clearCurrentUser();
+
+    /*
+     * خطا را دوباره throw می‌کنیم تا
+     * AppShell بتواند پیام مناسب نشان دهد.
+     */
+    throw error;
+  }
+}

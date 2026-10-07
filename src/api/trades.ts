@@ -1,3 +1,4 @@
+
 import { getAccessToken } from "@/lib/auth-storage";
 
 const API_BASE = "/backend";
@@ -47,26 +48,43 @@ function getToken(): string | null {
   return getAccessToken();
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get("content-type") ?? "";
+async function parseResponse<T>(
+  response: Response,
+): Promise<T> {
+  const contentType =
+    response.headers.get("content-type") ?? "";
 
-  const data = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
+  const data =
+    contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
 
   if (!response.ok) {
     let message = "خطا در دریافت معاملات";
 
-    if (typeof data === "string" && data.trim()) {
+    if (
+      typeof data === "string" &&
+      data.trim()
+    ) {
       message = data;
-    } else if (data && typeof data === "object") {
-      const errorData = data as Record<string, unknown>;
+    } else if (
+      data &&
+      typeof data === "object"
+    ) {
+      const errorData =
+        data as Record<string, unknown>;
 
-      if (typeof errorData.detail === "string") {
+      if (
+        typeof errorData.detail === "string"
+      ) {
         message = errorData.detail;
-      } else if (typeof errorData.message === "string") {
+      } else if (
+        typeof errorData.message === "string"
+      ) {
         message = errorData.message;
-      } else if (typeof errorData.error === "string") {
+      } else if (
+        typeof errorData.error === "string"
+      ) {
         message = errorData.error;
       }
     }
@@ -85,6 +103,26 @@ async function parseResponse<T>(response: Response): Promise<T> {
  * GET /app/trades/?page=2
  * ...
  *
+ * ساختار فعلی API:
+ *
+ * {
+ *   "count": 131,
+ *   "next": "...?page=2",
+ *   "previous": null,
+ *   "transactions": [...]
+ * }
+ *
+ * همچنین ساختار قدیمی زیر نیز پشتیبانی می‌شود:
+ *
+ * {
+ *   "count": 131,
+ *   "next": "...?page=2",
+ *   "previous": null,
+ *   "results": {
+ *     "transactions": [...]
+ *   }
+ * }
+ *
  * بک‌اند خودش پرتفولیوی فعال را تشخیص می‌دهد.
  */
 export async function getTrades(
@@ -98,7 +136,10 @@ export async function getTrades(
     );
   }
 
-  const safePage = Math.max(1, Math.floor(page));
+  const safePage = Math.max(
+    1,
+    Math.floor(page),
+  );
 
   const response = await fetch(
     `${API_BASE}/app/trades/?page=${safePage}`,
@@ -111,18 +152,18 @@ export async function getTrades(
     },
   );
 
-  const data = await parseResponse<unknown>(response);
+  const data = await parseResponse<unknown>(
+    response,
+  );
 
   /*
-   * ساختار فعلی Swagger:
+   * ساختار JSON فعلی API:
    *
    * {
-   *   count: 115,
-   *   next: "...?page=2",
+   *   count: 131,
+   *   next: "...",
    *   previous: null,
-   *   results: {
-   *     transactions: [...]
-   *   }
+   *   transactions: [...]
    * }
    */
 
@@ -131,33 +172,69 @@ export async function getTrades(
     typeof data === "object" &&
     !Array.isArray(data)
   ) {
-    const responseData = data as Record<string, unknown>;
+    const responseData =
+      data as Record<string, unknown>;
 
+    /*
+     * اول ساختار فعلی API را بررسی می‌کنیم:
+     *
+     * response.transactions
+     */
+    const directTransactions =
+      Array.isArray(
+        responseData.transactions,
+      )
+        ? (responseData.transactions as Trade[])
+        : null;
+
+    /*
+     * سپس ساختار قدیمی API را بررسی می‌کنیم:
+     *
+     * response.results.transactions
+     */
     const results =
       responseData.results &&
       typeof responseData.results === "object"
-        ? (responseData.results as Record<string, unknown>)
+        ? (responseData.results as Record<
+            string,
+            unknown
+          >)
         : null;
 
-    const transactions = Array.isArray(
-      results?.transactions,
-    )
-      ? (results?.transactions as Trade[])
-      : [];
+    const nestedTransactions =
+      Array.isArray(
+        results?.transactions,
+      )
+        ? (results.transactions as Trade[])
+        : null;
+
+    /*
+     * اگر ساختار فعلی وجود داشت،
+     * همان را استفاده می‌کنیم.
+     *
+     * در غیر این صورت ساختار قدیمی.
+     */
+    const transactions =
+      directTransactions ??
+      nestedTransactions ??
+      [];
 
     return {
       count:
-        typeof responseData.count === "number"
+        typeof responseData.count ===
+        "number"
           ? responseData.count
           : transactions.length,
 
       next:
-        typeof responseData.next === "string"
+        typeof responseData.next ===
+        "string"
           ? responseData.next
           : null,
 
       previous:
-        typeof responseData.previous === "string"
+        typeof responseData.previous ===
+        "string"
           ? responseData.previous
           : null,
 
@@ -169,7 +246,7 @@ export async function getTrades(
 
   /*
    * پشتیبانی احتیاطی از نسخه‌های قدیمی API
-   * اگر بک‌اند به جای pagination مستقیماً آرایه برگرداند.
+   * اگر بک‌اند مستقیماً آرایه برگرداند.
    */
   if (Array.isArray(data)) {
     return {
@@ -182,6 +259,10 @@ export async function getTrades(
     };
   }
 
+  /*
+   * اگر پاسخ API ساختار شناخته‌شده‌ای نداشت،
+   * یک پاسخ خالی و معتبر برمی‌گردانیم.
+   */
   return {
     count: 0,
     next: null,
