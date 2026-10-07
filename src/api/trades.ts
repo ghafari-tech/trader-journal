@@ -6,29 +6,19 @@ export interface Trade {
   id: string | number;
   transaction_id: string;
   mt_ticket?: string | number | null;
-
   symbol: string;
-
   transaction_type: "buy" | "sell" | string;
-
   entry_price: string | number;
   exit_price: string | number;
-
   volume: string | number;
-
   stop_loss?: string | number | null;
   take_profit?: string | number | null;
-
   risk_reward: string | number;
   profit_loss: string | number;
-
   followed_plan: boolean;
-
   r_r: string | number;
-
   created_at: string;
   closed_at: string | null;
-
   portfolio: string | number;
 }
 
@@ -43,6 +33,28 @@ export interface TradesResponse {
   results: TradesResult;
 }
 
+export interface CreateTradePayload {
+  symbol: string;
+  transaction_type: string;
+  entry_price: string | number;
+  exit_price?: string | number;
+  stop_loss?: string | number;
+  take_profit?: string | number;
+  volume: string | number;
+  risk_percent?: string | number;
+  commission?: string | number;
+  swap?: string | number;
+  notes?: string;
+  entry_reason?: string;
+  exit_reason?: string;
+  emotion_before?: string;
+  emotion_after?: string;
+  followed_plan?: boolean;
+  mistakes?: string;
+  lessons?: string;
+  chart_image?: File | null;
+}
+
 function getToken(): string | null {
   return getAccessToken();
 }
@@ -55,7 +67,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
     : await response.text();
 
   if (!response.ok) {
-    let message = "خطا در دریافت معاملات";
+    let message = "خطا در برقراری ارتباط با سرور";
 
     if (typeof data === "string" && data.trim()) {
       message = data;
@@ -77,71 +89,34 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-/**
- * دریافت معاملات صفحه مشخص.
- *
- * API:
- * GET /app/trades/?page=1
- * GET /app/trades/?page=2
- * ...
- *
- * بک‌اند خودش پرتفولیوی فعال را تشخیص می‌دهد.
- */
-export async function getTrades(
-  page = 1,
-): Promise<TradesResponse> {
+export async function getTrades(page = 1): Promise<TradesResponse> {
   const token = getToken();
 
   if (!token) {
-    throw new Error(
-      "نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.",
-    );
+    throw new Error("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.");
   }
 
   const safePage = Math.max(1, Math.floor(page));
 
-  const response = await fetch(
-    `${API_BASE}/app/trades/?page=${safePage}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+  const response = await fetch(`${API_BASE}/app/trades/?page=${safePage}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
     },
-  );
+  });
 
   const data = await parseResponse<unknown>(response);
 
-  /*
-   * ساختار فعلی Swagger:
-   *
-   * {
-   *   count: 115,
-   *   next: "...?page=2",
-   *   previous: null,
-   *   results: {
-   *     transactions: [...]
-   *   }
-   * }
-   */
-
-  if (
-    data &&
-    typeof data === "object" &&
-    !Array.isArray(data)
-  ) {
+  if (data && typeof data === "object" && !Array.isArray(data)) {
     const responseData = data as Record<string, unknown>;
 
     const results =
-      responseData.results &&
-      typeof responseData.results === "object"
+      responseData.results && typeof responseData.results === "object"
         ? (responseData.results as Record<string, unknown>)
         : null;
 
-    const transactions = Array.isArray(
-      results?.transactions,
-    )
+    const transactions = Array.isArray(results?.transactions)
       ? (results?.transactions as Trade[])
       : [];
 
@@ -150,27 +125,20 @@ export async function getTrades(
         typeof responseData.count === "number"
           ? responseData.count
           : transactions.length,
-
       next:
         typeof responseData.next === "string"
           ? responseData.next
           : null,
-
       previous:
         typeof responseData.previous === "string"
           ? responseData.previous
           : null,
-
       results: {
         transactions,
       },
     };
   }
 
-  /*
-   * پشتیبانی احتیاطی از نسخه‌های قدیمی API
-   * اگر بک‌اند به جای pagination مستقیماً آرایه برگرداند.
-   */
   if (Array.isArray(data)) {
     return {
       count: data.length,
@@ -190,4 +158,27 @@ export async function getTrades(
       transactions: [],
     },
   };
+}
+
+export async function createTrade(payload: CreateTradePayload): Promise<Trade> {
+  const token = getToken();
+
+  if (!token) {
+    throw new Error("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.");
+  }
+
+  // حذف فیلد تصویر برای ارسال به صورت JSON
+  const { chart_image, ...bodyPayload } = payload;
+
+  const response = await fetch(`${API_BASE}/app/trades/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(bodyPayload),
+  });
+
+  return await parseResponse<Trade>(response);
 }
