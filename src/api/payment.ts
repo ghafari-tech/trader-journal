@@ -1,3 +1,4 @@
+
 import { apiFetch } from "@/api/client";
 
 export type PaymentRequestPayload = {
@@ -27,24 +28,44 @@ export type PaymentVerifyResponse = {
 export async function requestPayment(
   payload: PaymentRequestPayload,
 ): Promise<PaymentRequestResponse> {
-  return apiFetch<PaymentRequestResponse>(
+  const response = await apiFetch<PaymentRequestResponse>(
     "/payment/request/",
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        subscription_id: payload.subscription_id,
+        ...(payload.discount_code?.trim()
+          ? { discount_code: payload.discount_code.trim() }
+          : {}),
+      }),
     },
   );
+
+  if (!response?.success || !response.payment_url) {
+    throw new Error("ایجاد درخواست پرداخت ناموفق بود.");
+  }
+
+  return response;
 }
 
 /**
- * تأیید پرداخت بعد از برگشت از درگاه
+ * تأیید پرداخت پس از بازگشت از درگاه
  *
- * توجه:
- * طبق Swagger این endpoint پارامتر رسمی ندارد
- * و authority را از callback/payment gateway دریافت می‌کند.
+ * طبق قرارداد فعلی API، endpoint پارامتر رسمی دریافت نمی‌کند.
+ * نتیجه نهایی پرداخت باید از پاسخ بک‌اند بررسی شود.
  */
 export async function verifyPayment(): Promise<PaymentVerifyResponse> {
-  return apiFetch<PaymentVerifyResponse>(
+  const response = await apiFetch<PaymentVerifyResponse>(
     "/payment/verify/",
+    {
+      method: "GET",
+    },
   );
+
+  if (!response || typeof response.success !== "boolean") {
+    throw new Error("پاسخ تأیید پرداخت از سرور معتبر نیست.");
+  }
+
+  return response;
 }
+

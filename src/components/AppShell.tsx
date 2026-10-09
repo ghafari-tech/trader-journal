@@ -144,9 +144,11 @@ type PlanApiResponse = {
   plan?: {
     id?: number;
     user?: number;
-    type_display?: string;
-    start_date?: string;
-    end_date?: string;
+    type?: number;
+    type_name?: string | null;
+    type_display?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
   } | null;
 };
 
@@ -163,7 +165,7 @@ function toPersianNumber(
 }
 
 function formatDate(
-  dateString?: string,
+  dateString?: string | null,
 ): string {
   if (!dateString) {
     return "—";
@@ -183,20 +185,24 @@ function formatDate(
 }
 
 function calculateRemainingDays(
-  endDate?: string,
+  endDate?: string | null,
 ): number | null {
   if (!endDate) {
     return null;
   }
 
-  const end = new Date(
-    `${endDate}T23:59:59`,
-  );
+  const normalizedDate = endDate.includes("T")
+    ? endDate
+    : `${endDate}T23:59:59`;
+
+  const end = new Date(normalizedDate);
+
+  if (Number.isNaN(end.getTime())) {
+    return null;
+  }
 
   const now = new Date();
-
-  const diff =
-    end.getTime() - now.getTime();
+  const diff = end.getTime() - now.getTime();
 
   if (diff <= 0) {
     return 0;
@@ -208,10 +214,10 @@ function calculateRemainingDays(
 }
 
 /**
- * تبدیل تاریخ API به متن فارسی
+ * تبدیل زمان اعلان به متن فارسی
  */
 function formatNotificationTime(
-  dateString?: string,
+  dateString?: string | null,
 ): string {
   if (!dateString) {
     return "";
@@ -225,8 +231,7 @@ function formatNotificationTime(
 
   const now = new Date();
 
-  const diffMs =
-    now.getTime() - date.getTime();
+  const diffMs = now.getTime() - date.getTime();
 
   const diffMinutes = Math.floor(
     diffMs / (1000 * 60),
@@ -240,91 +245,68 @@ function formatNotificationTime(
     return `${toPersianNumber(diffMinutes)} دقیقه پیش`;
   }
 
-  const diffHours = Math.floor(
-    diffMinutes / 60,
-  );
+  const diffHours = Math.floor(diffMinutes / 60);
 
   if (diffHours < 24) {
     return `${toPersianNumber(diffHours)} ساعت پیش`;
   }
 
-  const diffDays = Math.floor(
-    diffHours / 24,
-  );
+  const diffDays = Math.floor(diffHours / 24);
 
   if (diffDays < 7) {
     return `${toPersianNumber(diffDays)} روز پیش`;
   }
 
-  return new Intl.DateTimeFormat(
-    "fa-IR",
-    {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    },
-  ).format(date);
+  return new Intl.DateTimeFormat("fa-IR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
-/**
- * آیکون اعلان
- */
+/* =========================================================
+   Notification Icon
+========================================================= */
+
 function NotificationIcon({
   notification,
 }: {
   notification: Notification;
 }) {
-  const icon =
-    String(notification.icon ?? "")
-      .trim()
-      .toLowerCase();
+  const icon = String(notification.icon ?? "")
+    .trim()
+    .toLowerCase();
 
   if (
     icon.includes("warning") ||
     icon.includes("alert") ||
     icon.includes("risk")
   ) {
-    return (
-      <span className="text-lg">
-        ⚠️
-      </span>
-    );
+    return <span className="text-lg">⚠️</span>;
   }
 
   if (
     icon.includes("success") ||
     icon.includes("check")
   ) {
-    return (
-      <span className="text-lg">
-        ✅
-      </span>
-    );
+    return <span className="text-lg">✅</span>;
   }
 
   if (
     icon.includes("trophy") ||
     icon.includes("achievement")
   ) {
-    return (
-      <span className="text-lg">
-        🏆
-      </span>
-    );
+    return <span className="text-lg">🏆</span>;
   }
 
   if (
     icon.includes("journal") ||
     icon.includes("book")
   ) {
-    return (
-      <BookOpen className="h-4 w-4" />
-    );
+    return <BookOpen className="h-4 w-4" />;
   }
 
-  return (
-    <Bell className="h-4 w-4" />
-  );
+  return <Bell className="h-4 w-4" />;
 }
 
 /* =========================================================
@@ -342,59 +324,49 @@ function UserBlock({
   const [plan, setPlan] =
     useState<PlanApiResponse["plan"]>(null);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const [error, setError] =
-    useState(false);
-
-  const [loggingOut, setLoggingOut] =
-    useState(false);
-
+  /**
+   * دریافت اطلاعات کاربر و اشتراک به‌صورت مستقل.
+   *
+   * خطای API اشتراک نباید باعث از دست رفتن
+   * اطلاعات نام و ایمیل کاربر شود.
+   */
   async function loadUserData() {
+    setLoading(true);
+    setError(false);
+
     try {
-      setLoading(true);
-      setError(false);
-
-      /*
-       * مسیر صحیح طبق Swagger:
-       * GET /app/settings/user-info/
-       */
-      const userResponse =
-        await apiFetch<UserApiResponse>(
-          "/app/settings/user-info/",
-          {
-            method: "GET",
-          },
-        );
-
-      /*
-       * مسیر پلن:
-       * GET /app/settings/plan/
-       */
-      const planResponse =
-        await apiFetch<PlanApiResponse>(
-          "/app/settings/plan/",
-          {
-            method: "GET",
-          },
-        );
-
-      setUser(userResponse);
-
-      setPlan(
-        planResponse?.plan ?? null,
+      const userResult = await apiFetch<UserApiResponse>(
+        "/app/settings/user-info/",
+        {
+          method: "GET",
+        },
       );
+
+      setUser(userResult);
     } catch (err) {
-      console.error(
-        "Load user / plan error:",
-        err,
+      console.error("Load user error:", err);
+      setError(true);
+    }
+
+    try {
+      const planResult = await apiFetch<PlanApiResponse>(
+        "/app/settings/plan/",
+        {
+          method: "GET",
+        },
       );
 
-      setError(true);
-    } finally {
-      setLoading(false);
+      setPlan(planResult?.plan ?? null);
+    } catch (err) {
+      console.error("Load plan error:", err);
+      setPlan(null);
     }
+
+    setLoading(false);
   }
 
   /**
@@ -410,58 +382,95 @@ function UserBlock({
 
       await logout();
 
-      toast.success(
-        "با موفقیت از حساب خارج شدید",
-      );
-
-      /*
-       * انتقال به صفحه اول سایت
-       */
-      window.location.href = "/";
-    } catch (error) {
-      console.error(
-        "Logout error:",
-        error,
-      );
-
-      /*
-       * حتی اگر API خطا بدهد،
-       * logout() توکن‌های محلی را پاک کرده است.
-       */
-      toast.error(
-        "از حساب خارج شدید",
-      );
+      toast.success("با موفقیت از حساب خارج شدید");
 
       window.location.href = "/";
+    } catch (err) {
+      console.error("Logout error:", err);
+
+      toast.error("در حال خروج از حساب...");
+
+      window.location.href = "/";
+    } finally {
+      setLoggingOut(false);
     }
   }
 
+  /**
+   * به‌روزرسانی اطلاعات در شرایط زیر:
+   * - ورود یا تغییر اطلاعات کاربر
+   * - تغییر اشتراک
+   * - بازگشت به صفحه پس از پرداخت
+   * - بازگشت به تب مرورگر
+   */
   useEffect(() => {
-    void loadUserData();
+    let mounted = true;
 
-    const handleUserChanged = () => {
-      void loadUserData();
+    const refreshUserData = () => {
+      if (mounted) {
+        void loadUserData();
+      }
     };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshUserData();
+      }
+    };
+
+    void loadUserData();
 
     window.addEventListener(
       "traderjournal-user-changed",
-      handleUserChanged,
+      refreshUserData,
+    );
+
+    window.addEventListener(
+      "traderjournal-plan-changed",
+      refreshUserData,
     );
 
     window.addEventListener(
       "storage",
-      handleUserChanged,
+      refreshUserData,
+    );
+
+    window.addEventListener(
+      "pageshow",
+      refreshUserData,
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange,
     );
 
     return () => {
+      mounted = false;
+
       window.removeEventListener(
         "traderjournal-user-changed",
-        handleUserChanged,
+        refreshUserData,
+      );
+
+      window.removeEventListener(
+        "traderjournal-plan-changed",
+        refreshUserData,
       );
 
       window.removeEventListener(
         "storage",
-        handleUserChanged,
+        refreshUserData,
+      );
+
+      window.removeEventListener(
+        "pageshow",
+        refreshUserData,
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
       );
     };
   }, []);
@@ -470,25 +479,18 @@ function UserBlock({
      Display Name
   ======================================================= */
 
-  const firstName =
-    user?.first_name?.trim() || "";
-
-  const lastName =
-    user?.last_name?.trim() || "";
+  const firstName = user?.first_name?.trim() || "";
+  const lastName = user?.last_name?.trim() || "";
 
   const fullName =
-    `${firstName} ${lastName}`.trim() ||
-    "کاربر";
+    `${firstName} ${lastName}`.trim() || "کاربر";
 
   const nameParts = fullName
     .split(/\s+/)
     .filter(Boolean);
 
-  const displayFirstName =
-    nameParts[0] || "";
-
-  const displayLastName =
-    nameParts.slice(1).join(" ");
+  const displayFirstName = nameParts[0] || "";
+  const displayLastName = nameParts.slice(1).join(" ");
 
   const initials =
     displayLastName.length > 0
@@ -499,16 +501,21 @@ function UserBlock({
      Plan
   ======================================================= */
 
+  /**
+   * نام پلن در API ممکن است با یکی از این دو فیلد
+   * برگردد: type_name یا type_display.
+   */
   const planName =
+    plan?.type_name?.trim() ||
     plan?.type_display?.trim() ||
     "بدون اشتراک";
 
-  const remainingDays =
-    calculateRemainingDays(
-      plan?.end_date,
-    );
+  const remainingDays = calculateRemainingDays(
+    plan?.end_date,
+  );
 
   const isPlanActive =
+    plan !== null &&
     remainingDays !== null &&
     remainingDays > 0;
 
@@ -521,8 +528,7 @@ function UserBlock({
       <div
         className={cn(
           "flex w-full items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-2.5",
-          compact &&
-            "border-0 bg-transparent p-1.5",
+          compact && "border-0 bg-transparent p-1.5",
         )}
       >
         <Avatar className="h-9 w-9">
@@ -533,7 +539,6 @@ function UserBlock({
 
         <div className="min-w-0 flex-1">
           <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-
           <div className="mt-2 h-3 w-12 animate-pulse rounded bg-muted" />
         </div>
       </div>
@@ -576,10 +581,7 @@ function UserBlock({
           </button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent
-          align="start"
-          className="w-56"
-        >
+        <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuLabel>
             اطلاعات کاربر
           </DropdownMenuLabel>
@@ -596,10 +598,7 @@ function UserBlock({
           </DropdownMenuItem>
 
           <DropdownMenuItem asChild>
-            <Link
-              to="/app/settings"
-              className="cursor-pointer"
-            >
+            <Link to="/app/settings" className="cursor-pointer">
               <Settings className="ml-2 h-4 w-4" />
               تنظیمات پروفایل
             </Link>
@@ -654,10 +653,7 @@ function UserBlock({
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent
-        align="start"
-        className="w-64"
-      >
+      <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>
           <div className="flex flex-col gap-1">
             <span className="text-sm font-semibold">
@@ -676,7 +672,7 @@ function UserBlock({
 
         <div className="px-2 py-2">
           <div className="rounded-lg border border-border bg-secondary/40 p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">
                 اشتراک فعلی
               </span>
@@ -703,9 +699,7 @@ function UserBlock({
                     </div>
 
                     <div className="mt-1 text-xs font-medium">
-                      {formatDate(
-                        plan.start_date,
-                      )}
+                      {formatDate(plan.start_date)}
                     </div>
                   </div>
 
@@ -715,9 +709,7 @@ function UserBlock({
                     </div>
 
                     <div className="mt-1 text-xs font-medium">
-                      {formatDate(
-                        plan.end_date,
-                      )}
+                      {formatDate(plan.end_date)}
                     </div>
                   </div>
                 </div>
@@ -730,22 +722,21 @@ function UserBlock({
                       </span>
 
                       <span className="text-xs font-semibold text-primary">
-                        {toPersianNumber(
-                          remainingDays ?? 0,
-                        )}{" "}
-                        روز
+                        {toPersianNumber(remainingDays ?? 0)} روز
                       </span>
                     </div>
                   ) : (
                     <span className="text-xs font-semibold text-destructive">
-                      اشتراک منقضی شده است
+                      {remainingDays === 0
+                        ? "اشتراک منقضی شده است"
+                        : "وضعیت اشتراک قابل تأیید نیست"}
                     </span>
                   )}
                 </div>
               </>
             ) : (
               <div className="mt-2 text-xs text-muted-foreground">
-                اشتراک فعالی برای حساب شما ثبت نشده است.
+                اطلاعات اشتراک دریافت نشد یا اشتراکی برای حساب شما ثبت نشده است.
               </div>
             )}
           </div>
@@ -754,20 +745,14 @@ function UserBlock({
         <DropdownMenuSeparator />
 
         <DropdownMenuItem asChild>
-          <Link
-            to="/app/settings"
-            className="cursor-pointer"
-          >
+          <Link to="/app/settings" className="cursor-pointer">
             <Settings className="ml-2 h-4 w-4" />
             تنظیمات پروفایل
           </Link>
         </DropdownMenuItem>
 
         <DropdownMenuItem asChild>
-          <Link
-            to="/app/portfolios"
-            className="cursor-pointer"
-          >
+          <Link to="/app/portfolios" className="cursor-pointer">
             <Wallet className="ml-2 h-4 w-4" />
             پرتفولیوها
           </Link>
@@ -788,9 +773,7 @@ function UserBlock({
             <LogOut className="ml-2 h-4 w-4" />
           )}
 
-          {loggingOut
-            ? "در حال خروج..."
-            : "خروج از حساب"}
+          {loggingOut ? "در حال خروج..." : "خروج از حساب"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -811,9 +794,7 @@ function NavList({
   return (
     <ul className="space-y-1">
       {nav.map((item) => {
-        const active =
-          location.pathname === item.to;
-
+        const active = location.pathname === item.to;
         const Icon = item.icon;
 
         return (
@@ -858,33 +839,20 @@ function NotificationsMenu() {
   const [notifications, setNotifications] =
     useState<Notification[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [open, setOpen] =
-    useState(false);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
 
   async function loadNotifications() {
     try {
       setLoading(true);
 
-      const data =
-        await getNotifications();
-
-      console.log(
-        "Notifications from API:",
-        data,
-      );
+      const data = await getNotifications();
 
       setNotifications(
         Array.isArray(data) ? data : [],
       );
-    } catch (error) {
-      console.error(
-        "Get notifications error:",
-        error,
-      );
-
+    } catch (err) {
+      console.error("Get notifications error:", err);
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -902,27 +870,18 @@ function NotificationsMenu() {
     }
 
     try {
-      await markNotificationAsRead(
-        notification.id,
-      );
+      await markNotificationAsRead(notification.id);
 
-      setNotifications(
-        (currentNotifications) =>
-          currentNotifications.map(
-            (item) =>
-              item.id === notification.id
-                ? {
-                    ...item,
-                    is_read: true,
-                  }
-                : item,
-          ),
+      setNotifications((currentNotifications) =>
+        currentNotifications.map((item) =>
+          item.id === notification.id
+            ? { ...item, is_read: true }
+            : item,
+        ),
       );
-    } catch (error) {
-      console.error(
-        "Mark notification as read error:",
-        error,
-      );
+    } catch (err) {
+      console.error("Mark notification as read error:", err);
+      toast.error("علامت‌گذاری اعلان انجام نشد.");
     }
   }
 
@@ -930,23 +889,16 @@ function NotificationsMenu() {
     void loadNotifications();
   }, []);
 
-  const activeNotifications =
-    notifications.filter(
-      (notification) =>
-        notification.is_active !== false,
-    );
+  const activeNotifications = notifications.filter(
+    (notification) => notification.is_active !== false,
+  );
 
-  const unreadCount =
-    activeNotifications.filter(
-      (notification) =>
-        notification.is_read === false,
-    ).length;
+  const unreadCount = activeNotifications.filter(
+    (notification) => notification.is_read === false,
+  ).length;
 
   return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={setOpen}
-    >
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
@@ -957,29 +909,19 @@ function NotificationsMenu() {
 
           {unreadCount > 0 && (
             <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
-              {toPersianNumber(
-                unreadCount,
-              )}
+              {toPersianNumber(unreadCount)}
             </span>
           )}
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent
-        align="end"
-        className="w-80"
-      >
+      <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>
-            اعلان‌ها
-          </span>
+          <span>اعلان‌ها</span>
 
           {unreadCount > 0 && (
             <span className="text-[11px] text-muted-foreground">
-              {toPersianNumber(
-                unreadCount,
-              )}{" "}
-              خوانده‌نشده
+              {toPersianNumber(unreadCount)} خوانده‌نشده
             </span>
           )}
         </DropdownMenuLabel>
@@ -997,75 +939,62 @@ function NotificationsMenu() {
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto">
-            {activeNotifications.map(
-              (notification) => {
-                const isUnread =
-                  notification.is_read ===
-                  false;
+            {activeNotifications.map((notification) => {
+              const isUnread = notification.is_read === false;
 
-                return (
-                  <DropdownMenuItem
-                    key={notification.id}
+              return (
+                <DropdownMenuItem
+                  key={notification.id}
+                  className={cn(
+                    "cursor-pointer items-start gap-3 py-3",
+                    isUnread && "bg-primary/5",
+                  )}
+                  onSelect={() => {
+                    void handleNotificationClick(notification);
+                  }}
+                >
+                  <div
                     className={cn(
-                      "cursor-pointer items-start gap-3 py-3",
-                      isUnread &&
-                        "bg-primary/5",
+                      "relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+                      isUnread
+                        ? "bg-primary/15 text-primary"
+                        : "bg-secondary text-muted-foreground",
                     )}
-                    onSelect={() => {
-                      void handleNotificationClick(
-                        notification,
-                      );
-                    }}
                   >
-                    <div
-                      className={cn(
-                        "relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg",
-                        isUnread
-                          ? "bg-primary/15 text-primary"
-                          : "bg-secondary text-muted-foreground",
-                      )}
-                    >
-                      <NotificationIcon
-                        notification={
-                          notification
-                        }
-                      />
-
-                      {isUnread && (
-                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={cn(
-                          "truncate text-sm",
-                          isUnread
-                            ? "font-bold text-foreground"
-                            : "font-medium",
-                        )}
-                      >
-                        {notification.title}
-                      </div>
-
-                      <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                        {notification.body}
-                      </div>
-
-                      <div className="mt-1 text-[10px] text-muted-foreground/70">
-                        {formatNotificationTime(
-                          notification.created_at,
-                        )}
-                      </div>
-                    </div>
+                    <NotificationIcon notification={notification} />
 
                     {isUnread && (
-                      <Circle className="mt-1 h-2 w-2 shrink-0 fill-primary text-primary" />
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
                     )}
-                  </DropdownMenuItem>
-                );
-              },
-            )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "truncate text-sm",
+                        isUnread
+                          ? "font-bold text-foreground"
+                          : "font-medium",
+                      )}
+                    >
+                      {notification.title}
+                    </div>
+
+                    <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                      {notification.body}
+                    </div>
+
+                    <div className="mt-1 text-[10px] text-muted-foreground/70">
+                      {formatNotificationTime(notification.created_at)}
+                    </div>
+                  </div>
+
+                  {isUnread && (
+                    <Circle className="mt-1 h-2 w-2 shrink-0 fill-primary text-primary" />
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
           </div>
         )}
       </DropdownMenuContent>
@@ -1088,21 +1017,14 @@ export function AppShell({
   subtitle?: string;
   actions?: ReactNode;
 }) {
-  const [mobileOpen, setMobileOpen] =
-    useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
-
-        {/* =================================================
-            Desktop Sidebar
-        ================================================= */}
-
+        {/* Desktop Sidebar */}
         <aside className="hidden w-64 shrink-0 border-l border-sidebar-border bg-sidebar lg:flex lg:flex-col">
-
           {/* Logo */}
-
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
               <LineChart className="h-5 w-5" />
@@ -1120,13 +1042,11 @@ export function AppShell({
           </div>
 
           {/* User */}
-
           <div className="border-b border-sidebar-border p-3">
             <UserBlock />
           </div>
 
           {/* Navigation */}
-
           <nav className="flex-1 overflow-y-auto p-3">
             <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               منو
@@ -1136,20 +1056,11 @@ export function AppShell({
           </nav>
         </aside>
 
-        {/* =================================================
-            Main
-        ================================================= */}
-
+        {/* Main */}
         <div className="flex min-w-0 flex-1 flex-col">
-
-          {/* =================================================
-              Topbar
-          ================================================= */}
-
+          {/* Topbar */}
           <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
-
             {/* Mobile menu */}
-
             <Sheet
               open={mobileOpen}
               onOpenChange={setMobileOpen}
@@ -1173,7 +1084,6 @@ export function AppShell({
                 </SheetTitle>
 
                 {/* Mobile Logo */}
-
                 <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
                   <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-[var(--shadow-glow)]">
                     <LineChart className="h-5 w-5" />
@@ -1191,33 +1101,26 @@ export function AppShell({
                 </div>
 
                 {/* Mobile User */}
-
                 <div className="border-b border-sidebar-border p-3">
                   <UserBlock />
                 </div>
 
                 {/* Mobile Navigation */}
-
                 <nav className="flex-1 overflow-y-auto p-3">
                   <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                     منو
                   </div>
 
                   <NavList
-                    onNavigate={() =>
-                      setMobileOpen(false)
-                    }
+                    onNavigate={() => setMobileOpen(false)}
                   />
                 </nav>
               </SheetContent>
             </Sheet>
 
             {/* Search + Actions */}
-
             <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
-
               {/* Search */}
-
               <div className="relative min-w-0 max-w-md flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
@@ -1228,9 +1131,7 @@ export function AppShell({
               </div>
 
               {/* Actions */}
-
               <div className="flex shrink-0 items-center gap-2">
-
                 <NotificationsMenu />
 
                 <Link
@@ -1257,18 +1158,13 @@ export function AppShell({
                     <Plus className="h-4 w-4" />
                   </Button>
                 </Link>
-
               </div>
             </div>
           </header>
 
-          {/* =================================================
-              Page Header
-          ================================================= */}
-
+          {/* Page Header */}
           <div className="border-b border-border bg-background/40 px-4 py-6 md:px-8">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:items-center sm:justify-between">
-
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-bold tracking-tight">
                   {title}
@@ -1286,21 +1182,15 @@ export function AppShell({
                   {actions}
                 </div>
               )}
-
             </div>
           </div>
 
-          {/* =================================================
-              Page Content
-          ================================================= */}
-
+          {/* Page Content */}
           <main className="flex-1 p-4 md:p-8">
             {children}
           </main>
-
         </div>
       </div>
     </div>
   );
 }
-
