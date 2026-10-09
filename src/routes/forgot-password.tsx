@@ -4,6 +4,7 @@ import { useState, FormEvent, ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiFetch } from "@/api/client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -20,9 +21,6 @@ function ForgotPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
-  // آدرس HTTPS دقیق سرور
-  const BASE_URL = "https://trade.piqagram.ir";
-
   // گام ۱: درخواست ارسال کد بازیابی به ایمیل
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,27 +31,24 @@ function ForgotPasswordPage() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${BASE_URL}/forgot-password/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
 
-      const data = (await res.json().catch(() => null)) as {
-        message?: string;
-        detail?: string;
-      } | null;
+      await apiFetch<{ message?: string }>(
+        "/forgot-password/",
+        {
+          method: "POST",
+          body: JSON.stringify({ email: email.trim() }),
+        },
+        { auth: false },
+      );
 
-      if (res.ok) {
-        toast.success(data?.message || "کد بازیابی به ایمیل شما ارسال شد");
-        setStep(2);
-      } else {
-        toast.error(
-          data?.detail || data?.message || "کاربری با این ایمیل یافت نشد"
-        );
-      }
-    } catch {
-      toast.error("ارتباط با سرور برقرار نشد");
+      toast.success("کد بازیابی به ایمیل شما ارسال شد");
+      setStep(2);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "کاربری با این ایمیل یافت نشد",
+      );
     } finally {
       setLoading(false);
     }
@@ -74,31 +69,28 @@ function ForgotPasswordPage() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${BASE_URL}/reset-password/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          code: code.trim(),
-          new_password: newPassword,
-        }),
-      });
 
-      const data = (await res.json().catch(() => null)) as {
-        message?: string;
-        detail?: string;
-      } | null;
+      await apiFetch<{ message?: string }>(
+        "/reset-password/",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email: email.trim(),
+            code: code.trim(),
+            new_password: newPassword,
+          }),
+        },
+        { auth: false },
+      );
 
-      if (res.ok) {
-        toast.success(data?.message || "رمز عبور با موفقیت تغییر یافت");
-        await navigate({ to: "/login" });
-      } else {
-        toast.error(
-          data?.detail || data?.message || "کد وارد شده اشتباه یا منقضی شده است"
-        );
-      }
-    } catch {
-      toast.error("ارتباط با سرور برقرار نشد");
+      toast.success("رمز عبور با موفقیت تغییر یافت");
+      await navigate({ to: "/login" });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "کد وارد شده اشتباه یا منقضی شده است",
+      );
     } finally {
       setLoading(false);
     }

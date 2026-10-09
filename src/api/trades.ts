@@ -299,3 +299,79 @@ export async function getTrades(
     },
   };
 }
+
+/**
+ * ثبت یک معامله جدید.
+ *
+ * چون ممکن است تصویر چارت (chart_image) هم ارسال شود،
+ * از FormData استفاده می‌کنیم تا هر دو نوع داده متنی و فایل
+ * در یک درخواست multipart/form-data ارسال شوند.
+ *
+ * API:
+ * POST /app/trades/add/
+ */
+export async function createTrade(
+  payload: CreateTradePayload,
+): Promise<Trade> {
+  const token = getToken();
+
+  if (!token) {
+    throw new Error("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد شوید.");
+  }
+
+  const formData = new FormData();
+
+  /*
+   * فقط فیلدهای غیرخالی را ارسال می‌کنیم تا از خطای
+   * اعتبارسنجی سمت سرور جلوگیری شود.
+   */
+  const appendIfPresent = (
+    key: string,
+    value: string | number | boolean | null | undefined,
+  ) => {
+    if (value === null || value === undefined || value === "") {
+      return;
+    }
+
+    formData.append(key, String(value));
+  };
+
+  appendIfPresent("symbol", payload.symbol);
+  appendIfPresent("transaction_type", payload.transaction_type);
+  appendIfPresent("entry_price", payload.entry_price);
+  appendIfPresent("exit_price", payload.exit_price);
+  appendIfPresent("stop_loss", payload.stop_loss);
+  appendIfPresent("take_profit", payload.take_profit);
+  appendIfPresent("volume", payload.volume);
+  appendIfPresent("risk_percent", payload.risk_percent);
+  appendIfPresent("commission", payload.commission);
+  appendIfPresent("swap", payload.swap);
+  appendIfPresent("notes", payload.notes);
+  appendIfPresent("entry_reason", payload.entry_reason);
+  appendIfPresent("exit_reason", payload.exit_reason);
+  appendIfPresent("emotion_before", payload.emotion_before);
+  appendIfPresent("emotion_after", payload.emotion_after);
+  appendIfPresent("mistakes", payload.mistakes);
+  appendIfPresent("lessons", payload.lessons);
+
+  if (payload.followed_plan !== undefined) {
+    formData.append("followed_plan", payload.followed_plan ? "true" : "false");
+  }
+
+  if (payload.chart_image) {
+    formData.append("chart_image", payload.chart_image);
+  }
+
+  const response = await fetch(`${API_BASE}/app/trades/add/`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await parseResponse<Trade>(response);
+
+  return data;
+}
