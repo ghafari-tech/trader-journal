@@ -16,7 +16,7 @@ export const ImportTradesModal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const BASE_URL = "http://trade.piqagram.ir";
+  const BASE_URL = "https://trade.piqagram.ir";
 
   const getAuthToken = (): string => {
     return localStorage.getItem("token") || localStorage.getItem("access_token") || "";
