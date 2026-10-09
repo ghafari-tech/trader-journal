@@ -362,7 +362,7 @@ export async function createTrade(
     formData.append("chart_image", payload.chart_image);
   }
 
-  const response = await fetch(`${API_BASE}/app/trades/add/`, {
+  const response = await fetch(`${API_BASE}/app/trades/`, {
     method: "POST",
     headers: {
       Accept: "application/json",
