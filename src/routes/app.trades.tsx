@@ -4,6 +4,7 @@ import { Plus, Loader2, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { getTrades, Trade } from "@/api/trades";
+import { ImportTradesModal } from "@/components/ImportTradesModal";
 
 export const Route = createFileRoute("/app/trades")({
   head: () => ({ meta: [{ title: "معاملات" }] }),
@@ -48,6 +49,7 @@ function TradesLayout() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold">معاملات شما</h2>
         <div className="flex gap-2">
+          <ImportTradesModal />
           <Button variant="outline" size="icon" onClick={fetchTradesList} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -84,8 +86,8 @@ function TradesLayout() {
                 <span
                   className={`mr-2 rounded px-2 py-0.5 text-xs font-semibold ${
                     trade.transaction_type.toLowerCase() === "buy"
-                      ? "bg-green-500/20 text-green-500"
-                      : "bg-red-500/20 text-red-500"
+                      ? "bg-green-500/25 text-green-400"
+                      : "bg-red-500/25 text-red-400"
                   }`}
                 >
                   {trade.transaction_type.toUpperCase()}
