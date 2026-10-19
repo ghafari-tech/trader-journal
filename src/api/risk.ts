@@ -1,6 +1,5 @@
-import { getAccessToken } from "@/lib/auth-storage";
 
-const API_BASE = "/backend";
+import { apiFetch } from "@/api/client";
 
 export interface RiskManagement {
   id?: number;
@@ -10,7 +9,16 @@ export interface RiskManagement {
   max_transaction_daily: number | string;
   max_consecutive_loss: number | string;
   min_r_r: number | string;
-  portfolio?: number | string;
+  portfolio?: number | string | null;
+}
+
+export interface RiskUsage {
+  max_risk_in_trade: number;
+  max_risk_in_day: number;
+  max_risk_in_week: number;
+  max_transaction_in_day: number;
+  max_consecutive_loss: number;
+  min_r_r: number;
 }
 
 export interface RiskManagementResponse {
@@ -26,130 +34,108 @@ export interface UpdateRiskManagementInput {
   min_r_r: string;
 }
 
-function getToken(): string {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error(
-      "توکن ورود پیدا نشد. لطفاً دوباره وارد حساب شوید.",
-    );
-  }
-
-  return token;
+interface UpdateRiskManagementResponse {
+  message?: string;
+  riskmanage?: RiskManagement;
 }
 
-function getErrorMessage(
-  data: unknown,
-  fallback: string,
-): string {
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "detail" in data &&
-    typeof (data as { detail?: unknown }).detail === "string"
-  ) {
-    return (data as { detail: string }).detail;
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "message" in data &&
-    typeof (data as { message?: unknown }).message === "string"
-  ) {
-    return (data as { message: string }).message;
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "error" in data &&
-    typeof (data as { error?: unknown }).error === "string"
-  ) {
-    return (data as { error: string }).error;
-  }
-
-  if (typeof data === "string" && data.trim()) {
-    return data;
-  }
-
-  return fallback;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
 }
 
-async function parseResponse(
-  response: Response,
-): Promise<unknown> {
-  const text = await response.text();
+function isNumericValue(value: unknown): boolean {
+  return (
+    (typeof value === "number" || typeof value === "string") &&
+    String(value).trim() !== "" &&
+    Number.isFinite(Number(value))
+  );
+}
 
-  if (!text) {
-    return null;
-  }
+function isRiskManagement(value: unknown): value is RiskManagement {
+  if (!isRecord(value)) return false;
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+  const fields: (keyof UpdateRiskManagementInput)[] = [
+    "max_risk",
+    "max_loss_daily",
+    "max_loss_weekly",
+    "max_transaction_daily",
+    "max_consecutive_loss",
+    "min_r_r",
+  ];
+
+  return fields.every((field) => isNumericValue(value[field]));
+}
+
+function isRiskUsage(value: unknown): value is RiskUsage {
+  if (!isRecord(value)) return false;
+
+  const fields: (keyof RiskUsage)[] = [
+    "max_risk_in_trade",
+    "max_risk_in_day",
+    "max_risk_in_week",
+    "max_transaction_in_day",
+    "max_consecutive_loss",
+    "min_r_r",
+  ];
+
+  return fields.every((field) => isNumericValue(value[field]));
 }
 
 /**
- * دریافت تنظیمات مدیریت ریسک پرتفولیوی فعال
- *
+ * دریافت قوانین ذخیره‌شده مدیریت ریسک.
  * GET /app/risk/
  */
 export async function getRiskManagement(): Promise<RiskManagement> {
-  const token = getToken();
+  const data = await apiFetch<RiskManagementResponse>("/app/risk/", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
 
-  const response = await fetch(
-    `${API_BASE}/app/risk/`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-
-  const data = await parseResponse(response);
-
-  console.log("GET /app/risk/ response:", data);
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در دریافت تنظیمات مدیریت ریسک: ${response.status}`,
-      ),
-    );
+  if (!isRecord(data) || !isRiskManagement(data.riskmanage)) {
+    throw new Error("ساختار پاسخ تنظیمات مدیریت ریسک نامعتبر است.");
   }
 
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "riskmanage" in data &&
-    typeof (data as { riskmanage?: unknown }).riskmanage === "object" &&
-    (data as { riskmanage?: unknown }).riskmanage !== null
-  ) {
-    return (data as RiskManagementResponse).riskmanage;
-  }
-
-  throw new Error(
-    "ساختار پاسخ تنظیمات مدیریت ریسک نامعتبر است.",
-  );
+  return data.riskmanage;
 }
 
 /**
- * ذخیره تنظیمات مدیریت ریسک پرتفولیوی فعال
- *
+ * دریافت شاخص‌های محاسبه‌شده مدیریت ریسک.
+ * GET /app/risk/look/
+ */
+export async function getRiskUsage(): Promise<RiskUsage> {
+  const data = await apiFetch<unknown>("/app/risk/look/", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!isRiskUsage(data)) {
+    throw new Error(
+      "ساختار پاسخ آمار مدیریت ریسک نامعتبر است.",
+    );
+  }
+
+  return {
+    max_risk_in_trade: Number(data.max_risk_in_trade),
+    max_risk_in_day: Number(data.max_risk_in_day),
+    max_risk_in_week: Number(data.max_risk_in_week),
+    max_transaction_in_day: Number(data.max_transaction_in_day),
+    max_consecutive_loss: Number(data.max_consecutive_loss),
+    min_r_r: Number(data.min_r_r),
+  };
+}
+
+/**
+ * ذخیره قوانین مدیریت ریسک.
  * POST /app/risk/update/
  */
 export async function updateRiskManagement(
   input: UpdateRiskManagementInput,
 ): Promise<RiskManagement | null> {
-  const token = getToken();
-
-  const body = {
+  const body: UpdateRiskManagementInput = {
     max_risk: String(input.max_risk),
     max_loss_daily: String(input.max_loss_daily),
     max_loss_weekly: String(input.max_loss_weekly),
@@ -158,48 +144,20 @@ export async function updateRiskManagement(
     min_r_r: String(input.min_r_r),
   };
 
-  const response = await fetch(
-    `${API_BASE}/app/risk/update/`,
+  const data = await apiFetch<UpdateRiskManagementResponse>(
+    "/app/risk/update/",
     {
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     },
   );
 
-  const data = await parseResponse(response);
-
-  console.log("POST /app/risk/update/ response:", data);
-
-  if (!response.ok) {
-    throw new Error(
-      getErrorMessage(
-        data,
-        `خطا در ذخیره تنظیمات مدیریت ریسک: ${response.status}`,
-      ),
-    );
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "riskmanage" in data &&
-    typeof (data as { riskmanage?: unknown }).riskmanage === "object" &&
-    (data as { riskmanage?: unknown }).riskmanage !== null
-  ) {
-    return (data as RiskManagementResponse).riskmanage;
-  }
-
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    !Array.isArray(data)
-  ) {
-    return data as RiskManagement;
+  if (isRecord(data) && isRiskManagement(data.riskmanage)) {
+    return data.riskmanage;
   }
 
   return null;
