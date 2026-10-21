@@ -1,3 +1,7 @@
+
+// 
+
+
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Users,
@@ -8,6 +12,8 @@ import {
   TrendingUp,
   Loader2,
   Pencil,
+  RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -84,6 +90,29 @@ type PaymentItem = {
   created_at?: string;
 };
 
+type AiModel = {
+  id: number;
+  name: string;
+  model: string;
+  description?: string;
+  api_key?: string;
+  url?: string;
+  is_default: boolean;
+  used_tokens: number;
+  request_count: number;
+};
+
+type AdminDashboardResponse = {
+  users_count?: number;
+  subscriptions_count?: number;
+  income_monthly?: number | string;
+  api_calls?: number;
+};
+
+type AiModelsResponse = {
+  ai_models: AiModel[];
+};
+
 const DEFAULT_PLANS: SubscriptionPlan[] = [
   { id: 2, name: "Pro", price: 0, description: "ویژه معامله‌‌گران حرفه‌ای" },
   { id: 3, name: "Pro Max", price: 0, description: "دسترسی کامل به تمام ابزارها" },
@@ -103,17 +132,22 @@ function getUserName(user: AdminUser): string {
   return fullName || "کاربر";
 }
 
-function getUserStatus(user: AdminUser): { label: string; className: string } {
+function getUserStatus(
+  user: AdminUser,
+): { label: string; className: string } {
   if (typeof user.is_active === "boolean") {
     if (user.is_active) {
       return {
         label: "فعال",
-        className: "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
+        className:
+          "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
       };
     }
+
     return {
       label: "غیرفعال",
-      className: "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
+      className:
+        "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
     };
   }
 
@@ -122,13 +156,15 @@ function getUserStatus(user: AdminUser): { label: string; className: string } {
   if (rawStatus === "active" || rawStatus === "فعال") {
     return {
       label: "فعال",
-      className: "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
+      className:
+        "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
     };
   }
 
   return {
     label: "غیرفعال",
-    className: "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
+    className:
+      "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
   };
 }
 
@@ -142,42 +178,67 @@ function getUserDate(user: AdminUser): string {
   return rawDate.split("T")[0];
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "دریافت اطلاعات از سرور ناموفق بود.";
+}
+
 function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState("");
 
-  // Subscriptions / Plans States
   const [plans, setPlans] = useState<SubscriptionPlan[]>(DEFAULT_PLANS);
   const [loadingPlans, setLoadingPlans] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] =
+    useState<SubscriptionPlan | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
 
-  // Payments State
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
 
-  // Form State for Editing
-  const [editForm, setEditForm] = useState({ name: "", price: "", description: "" });
+  const [aiModels, setAiModels] = useState<AiModel[]>([]);
+  const [loadingAiModels, setLoadingAiModels] = useState(true);
+  const [aiModelsError, setAiModelsError] = useState("");
+  const [apiCalls, setApiCalls] = useState<number | null>(null);
+  const [loadingAdminStats, setLoadingAdminStats] = useState(true);
+  const [adminStatsError, setAdminStatsError] = useState("");
 
-  async function loadUsers() {
+  const [editForm, setEditForm] = useState({
+    name: "",
+    price: "",
+    description: "",
+  });
+
+  const [accessState, setAccessState] = useState<
+    "checking" | "allowed" | "denied"
+  >("checking");
+
+  async function loadUsers(): Promise<boolean> {
     try {
       setLoadingUsers(true);
       setUsersError("");
+
       const response = await apiFetch<AdminUsersResponse>(
         "/app/admin/users/",
         { method: "GET" },
-        { auth: true }
+        { auth: true },
       );
-      if (response && Array.isArray(response.users)) {
-        setUsers(response.users);
+
+      if (!response || !Array.isArray(response.users)) {
+        throw new Error("ساختار پاسخ کاربران معتبر نیست.");
       }
+
+      setUsers(response.users);
+      return true;
     } catch (error) {
       console.error("Admin users error:", error);
-      setUsersError(
-        error instanceof Error ? error.message : "دریافت لیست کاربران ناموفق بود"
-      );
+      setUsersError(getErrorMessage(error));
+      return false;
     } finally {
       setLoadingUsers(false);
     }
@@ -186,16 +247,18 @@ function AdminPage() {
   async function loadPlans() {
     try {
       setLoadingPlans(true);
+
       const response = await apiFetch<SubscriptionsResponse>(
         "/app/admin/subscriptions/",
         { method: "GET" },
-        { auth: true }
+        { auth: true },
       );
+
       if (response && Array.isArray(response.subscriptions)) {
         setPlans(response.subscriptions);
       }
     } catch (error) {
-      console.warn("Could not fetch subscriptions, using fallback:", error);
+      console.warn("Could not fetch subscriptions:", error);
     } finally {
       setLoadingPlans(false);
     }
@@ -204,11 +267,13 @@ function AdminPage() {
   async function loadPayments() {
     try {
       setLoadingPayments(true);
+
       const response = await apiFetch<PaymentItem[]>(
         "/app/admin/pays/",
         { method: "GET" },
-        { auth: true }
+        { auth: true },
       );
+
       if (Array.isArray(response)) {
         setPayments(response);
       }
@@ -219,10 +284,80 @@ function AdminPage() {
     }
   }
 
+  async function loadAdminStats() {
+    try {
+      setLoadingAdminStats(true);
+      setAdminStatsError("");
+
+      const response = await apiFetch<AdminDashboardResponse>(
+        "/app/admin/",
+        { method: "GET" },
+        { auth: true },
+      );
+
+      if (!response || typeof response.api_calls !== "number") {
+        throw new Error("ساختار پاسخ آمار پنل مدیریت معتبر نیست.");
+      }
+
+      setApiCalls(response.api_calls);
+    } catch (error) {
+      console.error("Admin dashboard stats error:", error);
+      setApiCalls(null);
+      setAdminStatsError(getErrorMessage(error));
+    } finally {
+      setLoadingAdminStats(false);
+    }
+  }
+
+  async function loadAiModels() {
+    try {
+      setLoadingAiModels(true);
+      setAiModelsError("");
+
+      const response = await apiFetch<AiModelsResponse>(
+        "/app/admin/ai-models/",
+        { method: "GET" },
+        { auth: true },
+      );
+
+      if (!response || !Array.isArray(response.ai_models)) {
+        throw new Error(
+          "ساختار پاسخ مدل‌های هوش مصنوعی معتبر نیست.",
+        );
+      }
+
+      setAiModels(response.ai_models);
+    } catch (error) {
+      console.error("Admin AI models error:", error);
+      setAiModels([]);
+      setAiModelsError(getErrorMessage(error));
+    } finally {
+      setLoadingAiModels(false);
+    }
+  }
+
+  async function checkAdminAccess() {
+    setAccessState("checking");
+
+    const allowed = await loadUsers();
+
+    if (!allowed) {
+      setAccessState("denied");
+      return;
+    }
+
+    setAccessState("allowed");
+
+    await Promise.all([
+      loadPlans(),
+      loadPayments(),
+      loadAiModels(),
+      loadAdminStats(),
+    ]);
+  }
+
   useEffect(() => {
-    void loadUsers();
-    void loadPlans();
-    void loadPayments();
+    void checkAdminAccess();
   }, []);
 
   const handleOpenEditModal = (plan: SubscriptionPlan) => {
@@ -241,29 +376,28 @@ function AdminPage() {
     try {
       setSavingPlan(true);
 
-      // استخراج عدد قیمت ناخالص
-      const cleanPrice = Number(editForm.price.toString().replace(/[^\d]/g, "")) || 0;
+      const cleanPrice =
+        Number(editForm.price.toString().replace(/[^\d]/g, "")) || 0;
 
-      // ساخت بدنه دقیق مطابق با Swagger
       const payload = {
         name: editForm.name,
         price: cleanPrice,
         features: selectedPlan.features
-          ? selectedPlan.features.map((f) => ({ value: f.value }))
+          ? selectedPlan.features.map((feature) => ({
+              value: feature.value,
+            }))
           : [],
       };
 
-      // ارسال درخواست PATCH به آدرس دقیق Swagger
       await apiFetch<SubscriptionPlan>(
         `/app/admin/subscriptions/update/${selectedPlan.id}/`,
         {
           method: "PATCH",
           body: JSON.stringify(payload),
         },
-        { auth: true }
+        { auth: true },
       );
 
-      // همگام‌سازی مجدد لیست پلن‌ها
       await loadPlans();
       setIsEditModalOpen(false);
     } catch (error) {
@@ -274,6 +408,45 @@ function AdminPage() {
     }
   };
 
+  if (accessState === "checking") {
+    return (
+      <AppShell
+        title="بررسی دسترسی"
+        subtitle="در حال بررسی مجوز ورود به پنل مدیریت"
+      >
+        <div className="card-surface flex min-h-60 items-center justify-center gap-3 p-6">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">
+            در حال بررسی دسترسی مدیریتی...
+          </span>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (accessState === "denied") {
+    return (
+      <AppShell
+        title="دسترسی محدود"
+        subtitle="پنل مدیریت"
+      >
+        <div className="card-surface flex min-h-60 flex-col items-center justify-center gap-4 p-6 text-center">
+          <ShieldAlert className="h-12 w-12 text-destructive" />
+          <h2 className="text-lg font-semibold">
+            امکان دسترسی به پنل مدیریت وجود ندارد
+          </h2>
+          <p className="max-w-lg text-sm text-muted-foreground">
+            دسترسی مدیریتی تأیید نشد. اگر حساب شما ادمین است،
+            اتصال سرور و مجوزهای حساب را بررسی کنید.
+          </p>
+          <Button onClick={() => void checkAdminAccess()}>
+            تلاش مجدد
+          </Button>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell
       title="پنل مدیریت"
@@ -283,7 +456,9 @@ function AdminPage() {
         {kpis.map((k) => (
           <div key={k.label} className="card-surface p-5">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{k.label}</span>
+              <span className="text-sm text-muted-foreground">
+                {k.label}
+              </span>
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
                 <k.icon className="h-4 w-4" />
               </div>
@@ -292,11 +467,24 @@ function AdminPage() {
             <div className="mt-3 text-2xl font-bold tabular">
               {k.label === "کل کاربران"
                 ? users.length.toLocaleString("fa-IR")
-                : k.value}
+                : k.label === "API Calls"
+                  ? loadingAdminStats
+                    ? "…"
+                    : apiCalls === null
+                      ? "—"
+                      : apiCalls.toLocaleString("fa-IR")
+                  : k.value}
             </div>
 
+            {k.label === "API Calls" && adminStatsError && (
+              <div className="mt-1 text-xs text-destructive">
+                دریافت آمار ناموفق بود
+              </div>
+            )}
             {k.change && (
-              <div className="mt-1 text-xs gain tabular">{k.change} این ماه</div>
+              <div className="mt-1 text-xs gain tabular">
+                {k.change} این ماه
+              </div>
             )}
           </div>
         ))}
@@ -321,8 +509,13 @@ function AdminPage() {
                 </div>
               ) : usersError ? (
                 <div className="flex min-h-40 flex-col items-center justify-center gap-3">
-                  <p className="text-sm text-destructive">{usersError}</p>
-                  <Button variant="outline" onClick={loadUsers}>
+                  <p className="text-sm text-destructive">
+                    {usersError}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => void loadUsers()}
+                  >
                     تلاش مجدد
                   </Button>
                 </div>
@@ -428,10 +621,15 @@ function AdminPage() {
                     </thead>
                     <tbody>
                       {payments.map((p) => (
-                        <tr key={p.id} className="border-b border-border/50 hover:bg-secondary/30">
+                        <tr
+                          key={p.id}
+                          className="border-b border-border/50 hover:bg-secondary/30"
+                        >
                           <td className="py-3 tabular">#{p.id}</td>
                           <td className="py-3">{p.user || "—"}</td>
-                          <td className="py-3 tabular">{p.amount ?? "—"}</td>
+                          <td className="py-3 tabular">
+                            {p.amount ?? "—"}
+                          </td>
                           <td className="py-3">{p.status || "—"}</td>
                           <td className="py-3 text-xs text-muted-foreground tabular">
                             {p.created_at || "—"}
@@ -455,7 +653,10 @@ function AdminPage() {
             ) : (
               <div className="grid gap-4 md:grid-cols-3">
                 {plans.map((plan) => (
-                  <div key={plan.id} className="card-surface p-5 flex flex-col justify-between">
+                  <div
+                    key={plan.id}
+                    className="card-surface flex flex-col justify-between p-5"
+                  >
                     <div>
                       <div className="font-semibold">{plan.name}</div>
                       <div className="mt-2 text-2xl font-bold tabular">
@@ -483,77 +684,151 @@ function AdminPage() {
             )}
           </TabsContent>
 
-          {/* API */}
+          {/* مدل‌های واقعی هوش مصنوعی */}
           <TabsContent value="apis" className="mt-4">
             <div className="card-surface p-5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">APIهای فعال</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">APIهای هوش مصنوعی</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    اطلاعات مدل‌های ثبت‌شده در بک‌اند
+                  </p>
+                </div>
+
                 <Button
+                  variant="outline"
                   size="sm"
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => void loadAiModels()}
+                  disabled={loadingAiModels}
                 >
-                  <Plus className="ml-1 h-4 w-4" />
-                  افزودن API
+                  {loadingAiModels ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="ml-2 h-4 w-4" />
+                  )}
+                  به‌روزرسانی
                 </Button>
               </div>
 
-              <div className="mt-4 space-y-3">
-                {[
-                  {
-                    n: "OpenAI GPT-5",
-                    key: "sk-...xY42",
-                    usage: 68,
-                    def: true,
-                  },
-                  {
-                    n: "Google Gemini Pro",
-                    key: "AIza...9k",
-                    usage: 42,
-                    def: false,
-                  },
-                ].map((api) => (
-                  <div
-                    key={api.n}
-                    className="flex items-center gap-4 rounded-lg border border-border bg-secondary/40 p-4"
+              {loadingAiModels ? (
+                <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  در حال دریافت مدل‌های هوش مصنوعی...
+                </div>
+              ) : aiModelsError ? (
+                <div className="mt-5 rounded-lg border border-destructive/30 p-4">
+                  <p className="text-sm text-destructive">
+                    {aiModelsError}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => void loadAiModels()}
                   >
-                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
-                      <Cpu className="h-4 w-4" />
-                    </div>
+                    تلاش مجدد
+                  </Button>
+                </div>
+              ) : aiModels.length === 0 ? (
+                <div className="mt-5 rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
+                  هیچ مدلی در پاسخ سرور ثبت نشده است.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  {aiModels.map((api) => (
+                    <div
+                      key={api.id}
+                      className="rounded-lg border border-border bg-secondary/40 p-4"
+                    >
+                      <div className="flex flex-wrap items-start gap-3">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                          <Cpu className="h-4 w-4" />
+                        </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{api.n}</span>
-                        {api.def && (
-                          <Badge className="bg-primary text-primary-foreground">
-                            پیش‌‌فرض
-                          </Badge>
-                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold">{api.name}</span>
+                            {api.is_default && (
+                              <Badge className="bg-primary text-primary-foreground">
+                                پیش‌فرض
+                              </Badge>
+                            )}
+                          </div>
+
+                          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                            {api.model}
+                          </p>
+
+                          {api.description && (
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              {api.description}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground tabular">
-                        کلید: {api.key}
+
+                      <div className="mt-4 grid gap-4 border-t border-border/70 pt-4 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            شناسه مدل
+                          </p>
+                          <p className="mt-1 font-mono text-sm">
+                            {api.id}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            توکن مصرف‌شده
+                          </p>
+                          <p className="mt-1 text-sm font-semibold tabular">
+                            {Number(api.used_tokens || 0).toLocaleString("fa-IR")}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            تعداد درخواست‌های موفق
+                          </p>
+                          <p className="mt-1 text-sm font-semibold tabular">
+                            {Number(api.request_count || 0).toLocaleString("fa-IR")}
+                          </p>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <p className="text-xs text-muted-foreground">
+                            آدرس سرویس
+                          </p>
+                          <p className="mt-1 break-all font-mono text-xs">
+                            {api.url || "ثبت نشده"}
+                          </p>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <p className="text-xs text-muted-foreground">
+                            وضعیت آمار
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            تعداد درخواست‌ها بر اساس درخواست‌های موفق ثبت‌شده در بک‌اند است.
+                          </p>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="text-sm tabular">
-                      {api.usage.toLocaleString()}K درخواست
-                    </div>
-
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Edit Plan Dialog */}
+      {/* ویرایش پلن */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent dir="rtl" className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>ویرایش پلن {selectedPlan?.name}</DialogTitle>
+            <DialogTitle>
+              ویرایش پلن {selectedPlan?.name}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
@@ -562,7 +837,12 @@ function AdminPage() {
               <Input
                 id="plan-name"
                 value={editForm.name}
-                onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((p) => ({
+                    ...p,
+                    name: e.target.value,
+                  }))
+                }
               />
             </div>
 
@@ -572,17 +852,30 @@ function AdminPage() {
                 id="plan-price"
                 type="number"
                 value={editForm.price}
-                onChange={(e) => setEditForm((p) => ({ ...p, price: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((p) => ({
+                    ...p,
+                    price: e.target.value,
+                  }))
+                }
               />
             </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditModalOpen(false)}
+            >
               انصراف
             </Button>
-            <Button onClick={handleSavePlan} disabled={savingPlan}>
-              {savingPlan && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+            <Button
+              onClick={handleSavePlan}
+              disabled={savingPlan}
+            >
+              {savingPlan && (
+                <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+              )}
               ذخیره تغییرات
             </Button>
           </DialogFooter>
