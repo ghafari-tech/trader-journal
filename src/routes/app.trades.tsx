@@ -78,26 +78,56 @@ function TradesLayout() {
           هیچ معامله‌ای پیدا نشد. برای ثبت اولین معامله روی دکمه بالا کلیک کنید.
         </div>
       ) : (
-        <div className="grid gap-4">
-          {trades.map((trade) => (
-            <div key={trade.id} className="card-surface flex items-center justify-between p-4">
-              <div>
-                <span className="font-bold">{trade.symbol}</span>
-                <span
-                  className={`mr-2 rounded px-2 py-0.5 text-xs font-semibold ${
-                    trade.transaction_type.toLowerCase() === "buy"
-                      ? "bg-green-500/25 text-green-400"
-                      : "bg-red-500/25 text-red-400"
-                  }`}
-                >
-                  {trade.transaction_type.toUpperCase()}
-                </span>
-              </div>
-              <div className="text-sm tabular text-muted-foreground">
-                ورود: {trade.entry_price} | خروج: {trade.exit_price}
-              </div>
-            </div>
-          ))}
+        <div className="card-surface overflow-hidden rounded-xl border border-border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm">
+              <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                <tr>
+                  <th className="p-4 font-medium">نماد</th>
+                  <th className="p-4 font-medium">نوع</th>
+                  <th className="p-4 font-medium">حجم</th>
+                  <th className="p-4 font-medium">قیمت ورود</th>
+                  <th className="p-4 font-medium">قیمت خروج</th>
+                  <th className="p-4 font-medium">تضمین/R:R</th>
+                  <th className="p-4 font-medium">سود / زیان</th>
+                  <th className="p-4 font-medium">تاریخ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {trades.map((trade) => {
+                  const isBuy = trade.transaction_type.toLowerCase() === "buy";
+                  const pnl = typeof trade.profit_loss === "number" ? trade.profit_loss : parseFloat(String(trade.profit_loss || 0));
+                  const isProfit = pnl >= 0;
+                  return (
+                    <tr key={trade.id} className="transition-colors hover:bg-muted/30">
+                      <td className="p-4 font-bold tabular">{trade.symbol}</td>
+                      <td className="p-4">
+                        <span
+                          className={`inline-flex rounded px-2 py-0.5 text-xs font-semibold ${
+                            isBuy
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                              : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                          }`}
+                        >
+                          {isBuy ? "خرید (BUY)" : "فروش (SELL)"}
+                        </span>
+                      </td>
+                      <td className="p-4 tabular text-muted-foreground">{trade.volume}</td>
+                      <td className="p-4 tabular">{trade.entry_price}</td>
+                      <td className="p-4 tabular">{trade.exit_price ?? "-"}</td>
+                      <td className="p-4 tabular text-muted-foreground">{trade.risk_reward ?? trade.r_r ?? "-"}</td>
+                      <td className={`p-4 tabular font-bold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
+                        {isProfit ? `+$${pnl}` : `-$${Math.abs(pnl)}`}
+                      </td>
+                      <td className="p-4 text-xs text-muted-foreground tabular">
+                        {trade.closed_at ? new Date(trade.closed_at).toLocaleDateString("fa-IR") : (trade.created_at ? new Date(trade.created_at).toLocaleDateString("fa-IR") : "-")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </AppShell>
