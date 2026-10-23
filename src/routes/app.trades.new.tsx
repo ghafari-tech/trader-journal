@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { createTrade } from "@/api/trades";
+import { ImportTradesModal } from "@/components/ImportTradesModal";
 
 export const Route = createFileRoute("/app/trades/new")({
   head: () => ({ meta: [{ title: "معامله جدید" }] }),
@@ -65,7 +66,15 @@ function NewTrade() {
   };
 
   return (
-    <AppShell title="ثبت معامله جدید" subtitle="اطلاعات معامله و ژورنال آن را وارد کنید">
+    <AppShell 
+      title="ثبت معامله جدید" 
+      subtitle="اطلاعات معامله و ژورنال آن را وارد کنید"
+      action={
+        <div className="flex items-center gap-2">
+          <ImportTradesModal />
+        </div>
+      }
+    >
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-3">
         {errorMessage && (
           <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-4 text-red-500 lg:col-span-3 text-sm">
