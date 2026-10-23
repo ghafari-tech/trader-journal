@@ -53,14 +53,22 @@ function LoginPage() {
       await navigate({
         to: "/app/dashboard",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
 
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "ورود ناموفق بود",
-      );
+      let errorMessage = "ایمیل یا رمز عبور اشتباه است";
+      
+      if (error && typeof error.status === "number") {
+        if (error.status === 401 || error.status === 400) {
+          errorMessage = "ایمیل یا رمز عبور وارد شده نادرست است";
+        } else if (error.message && !error.message.includes("خطای API")) {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error && error.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
