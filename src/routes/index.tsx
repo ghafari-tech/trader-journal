@@ -41,9 +41,10 @@ const features = [
   { icon: Trophy, title: "سیستم نشان", desc: "کسب دستاورد برای حفظ انگیزه و ساخت عادات معاملاتی سالم." },
 ];
 
-const plans = [
+const DEFAULT_PLANS = [
   {
-    name: "رایگان",
+    id: 1,
+    name: "Free",
     price: "۰",
     unit: "تومان",
     tagline: "برای شروع ژورنال‌نویسی",
@@ -52,8 +53,9 @@ const plans = [
     highlight: false,
   },
   {
+    id: 2,
     name: "Pro",
-    price: "۲۰۰,۰۰۰",
+    price: "۱۰۰,۰۰۰",
     unit: "تومان / ماه",
     tagline: "برای معامله‌گران فعال",
     features: [
@@ -68,8 +70,9 @@ const plans = [
     highlight: true,
   },
   {
+    id: 3,
     name: "Pro Max",
-    price: "۵۰۰,۰۰۰",
+    price: "۴۰۰,۰۰۰",
     unit: "تومان / ماه",
     tagline: "مربی شخصی معامله‌گری",
     features: [
@@ -86,6 +89,8 @@ const plans = [
 ];
 
 function Landing() {
+  const plans = DEFAULT_PLANS;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Nav */}
