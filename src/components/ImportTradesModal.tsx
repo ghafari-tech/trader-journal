@@ -1,4 +1,4 @@
-import React, { useState, ChangeEvent, FormEvent } from "react";
+import React, { useState, ChangeEvent, FormEvent, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,17 +9,38 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { getAccessToken } from "@/lib/auth-storage";
+import { getPortfolios, Portfolio } from "@/api/portfolio";
 
 export const ImportTradesModal: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string>("");
 
-  const BASE_URL = "https://trade.piqagram.ir";
+  useEffect(() => {
+    getPortfolios()
+      .then((data) => {
+        if (data && data.length > 0) {
+          setPortfolios(data);
+          const activeId = localStorage.getItem("active_portfolio_id") || String(data[0].id);
+          setSelectedPortfolioId(activeId);
+        }
+      })
+      .catch((err) => {
+        console.error("خطا در دریافت پورتفوی‌ها:", err);
+      });
+  }, []);
 
-  const getAuthToken = (): string => {
-    return localStorage.getItem("token") || localStorage.getItem("access_token") || "";
+  const getAuthToken = (): string | null => {
+    const rawToken = getAccessToken();
+    if (!rawToken) return null;
+    if (rawToken.startsWith("Bearer ")) {
+      return rawToken;
+    }
+    return `Bearer ${rawToken}`;
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -34,19 +55,31 @@ export const ImportTradesModal: React.FC = () => {
     e.preventDefault();
     if (!file) return;
 
+    if (!selectedPortfolioId) {
+      setErrorMsg("لطفاً یک پورتفوی انتخاب کنید.");
+      return;
+    }
+
     setIsUploading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
     try {
       const token = getAuthToken();
+      if (!token) {
+        setErrorMsg("نشست کاربری شما منقضی شده است. لطفاً دوباره وارد سیستم شوید.");
+        setIsUploading(false);
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("portfolio_id", selectedPortfolioId);
 
-      const response = await fetch(`${BASE_URL}/app/trades/add/import/`, {
+      const response = await fetch("/backend/app/trades/add/import/", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: token,
         },
         body: formData,
       });
@@ -91,6 +124,25 @@ export const ImportTradesModal: React.FC = () => {
         </DialogHeader>
 
         <form onSubmit={handleImport} className="space-y-4 mt-4 text-right">
+          {portfolios.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                انتخاب پورتفوی مقصد:
+              </label>
+              <select
+                value={selectedPortfolioId}
+                onChange={(e) => setSelectedPortfolioId(e.target.value)}
+                className="w-full p-2 text-sm bg-secondary/50 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                {portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.broker})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="border-2 border-dashed border-border hover:border-emerald-500 rounded-lg p-6 text-center cursor-pointer transition-colors bg-secondary/30">
             <input
               type="file"
